@@ -29,6 +29,17 @@ class KaspaFiatAmountState internal constructor(private val onKasTextChange: (St
         private set
     var displayText: String by mutableStateOf("")
         private set
+    /** The KAS text last handed to [onKasTextChange]. A unit switch only changes what's shown,
+     *  never the amount: converting back from the 2-decimal currency figure used to put a
+     *  different KAS number on screen than the one the caller still held and would send (iOS
+     *  0799cec). */
+    private var kasText: String by mutableStateOf("")
+
+    /** Hands [text] to the caller as the amount, and remembers it as [kasText]. */
+    private fun publishKas(text: String) {
+        kasText = text
+        onKasTextChange(text)
+    }
 
     private fun kasFromDisplay(priceInCurrency: Double?): Double? {
         val entered = displayText.toDoubleOrNull() ?: return null
@@ -40,10 +51,10 @@ class KaspaFiatAmountState internal constructor(private val onKasTextChange: (St
     fun onDisplayTextChange(text: String, priceInCurrency: Double?) {
         displayText = text
         if (!isFiatMode) {
-            onKasTextChange(text)
+            publishKas(text)
             return
         }
-        onKasTextChange(kasFromDisplay(priceInCurrency)?.let { formatKasAmount(it) } ?: "")
+        publishKas(kasFromDisplay(priceInCurrency)?.let { formatKasAmount(it) } ?: "")
     }
 
     /** Caller's own Max button already knows the current max sendable KAS (fee-aware, etc.) -
@@ -54,7 +65,7 @@ class KaspaFiatAmountState internal constructor(private val onKasTextChange: (St
         } else {
             formatKasAmount(maxKas)
         }
-        onKasTextChange(formatKasAmount(maxKas))
+        publishKas(formatKasAmount(maxKas))
     }
 
     /** An exact KAS amount set by code (a payment request's, iOS c6851d6): [kasText] is what the
@@ -66,19 +77,21 @@ class KaspaFiatAmountState internal constructor(private val onKasTextChange: (St
         } else {
             kasText
         }
-        onKasTextChange(kasText)
+        publishKas(kasText)
     }
 
     /** Flips units, carrying today's typed number over converted into the other one rather than
-     *  clearing the field. No-ops if there's no live price yet to convert with. */
+     *  clearing the field. No-ops if there's no live price yet to convert with. Back in KAS it
+     *  shows the exact amount the caller holds ([kasText]), not one worked back from the rounded
+     *  currency figure (iOS 0799cec). */
     fun toggleMode(priceInCurrency: Double?) {
         if (priceInCurrency == null || priceInCurrency <= 0.0) return
-        val kas = kasFromDisplay(priceInCurrency)
+        val kas = kasText.toDoubleOrNull() ?: kasFromDisplay(priceInCurrency)
         isFiatMode = !isFiatMode
         displayText = when {
             kas == null -> ""
             isFiatMode -> formatFiatPlain(kas * priceInCurrency)
-            else -> formatKasAmount(kas)
+            else -> kasText.ifEmpty { formatKasAmount(kas) }
         }
     }
 
@@ -88,7 +101,8 @@ class KaspaFiatAmountState internal constructor(private val onKasTextChange: (St
     fun conversionLabelText(priceInCurrency: Double?, currencyCode: String): String? {
         val kas = kasFromDisplay(priceInCurrency) ?: return null
         return if (isFiatMode) {
-            "${formatKasAmount(kas)} ${KaspaUnit.symbol}"
+            // the KAS that will be sent, exactly (iOS 0799cec)
+            "${kasText.ifEmpty { formatKasAmount(kas) }} ${KaspaUnit.symbol}"
         } else {
             if (priceInCurrency == null || priceInCurrency <= 0.0) null else formatFiatAmount(kas * priceInCurrency, currencyCode)
         }

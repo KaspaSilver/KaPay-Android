@@ -150,14 +150,20 @@ class PushRegistrationManager @Inject constructor(
     }
 
     /**
-     * Fire-and-forget unregister that snapshots the signing material SYNCHRONOUSLY, so callers
-     * about to destroy the wallet (account deletion, logout) can invoke it first and the
+     * Fire-and-forget unregister that snapshots the active account's record SYNCHRONOUSLY, so
+     * callers about to destroy the wallet (account deletion, logout) can invoke it first and the
      * challenge/sign round-trip still has the key even though the wallet is gone by the time the
-     * coroutine runs — the same ordering iOS uses (unregister BEFORE clearing the wallet).
+     * coroutine runs — the same ordering iOS uses (unregister BEFORE clearing the wallet). The
+     * key itself is derived from that record in the coroutine, off the main thread.
      */
     fun unregisterAsync() {
-        val material = try { signingMaterial() } catch (_: Exception) { null }
+        // Only the account record is taken here (cheap); the key is derived from it on the IO
+        // scope, so Log Out and Delete don't run PBKDF2 on the main thread.
+        val account = walletManager.getActiveAccount()
         scope.launch {
+            val material = account?.let {
+                try { SigningMaterial(walletManager.identityPrivateKeyBytesFor(it), it.address.trim()) } catch (_: Exception) { null }
+            }
             runCatching { unregisterInternal(material) }
                 .onFailure { Log.w(TAG, "push unregister failed: ${it.message}") }
         }
@@ -289,6 +295,11 @@ class PushRegistrationManager @Inject constructor(
 
     private suspend fun register(tokenOverride: String?) = mutex.withLock {
         if (!walletManager.hasWallet()) return@withLock
+        // Signed out stays unregistered, a cold start on the sign-in screen included (iOS has no
+        // current wallet then); login() registers.
+        if (walletManager.isLoggedOut) return@withLock
+        // no account active (the active one was deleted): nothing registers until a sign-in
+        if (walletManager.getActiveAccount() == null) return@withLock
         if (!settings.notificationsEnabled.first()) return@withLock
         if (settings.pushIndexerUrl.first().isBlank()) {
             withContext(Dispatchers.IO) { leavePushServiceOfOtherNetworkIfNeeded() }

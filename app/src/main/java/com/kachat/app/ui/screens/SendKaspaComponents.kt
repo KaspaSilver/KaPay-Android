@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import com.kachat.app.services.AddressBookManager
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.outlined.Badge
@@ -795,7 +796,7 @@ fun SendFeeControls(
         SendFeeTierPicker(feeTier, onFeeTierChange)
         Text(
             if (onEditFee == null) stringResource(R.string.send_fee_tier_footer)
-            else "If the network is busy, Fast or Priority pays a higher fee to help this confirm sooner. Edit sets a fee of your own.",
+            else tr(R.string.kp_if_the_network_is_busy_fast_227d7),
             color = colors.textSecondary,
             fontSize = 12.sp,
         )
@@ -1154,9 +1155,9 @@ fun SendFeeEditorScreen(
     val reference = minimumSompi ?: referenceSompi
     val isHigh = draftSompi != null && reference != null && reference > 0L && draftSompi > reference * 10
     val minimumLine = minimumSompi?.let {
-        KaspaUnit.label("The network needs at least ${KaspaUnit.plain(it)} KAS. A lower fee is raised to that.")
+        KaspaUnit.label(tr(R.string.kp_the_network_needs_at_least_kas_ee488, KaspaUnit.plain(it)))
     }
-    val footnote = if (isHigh) listOfNotNull("This is much more than the network needs.", minimumLine).joinToString(" ") else minimumLine
+    val footnote = if (isHigh) listOfNotNull(tr(R.string.kp_this_is_much_more_than_the_2ef8c), minimumLine).joinToString(" ") else minimumLine
     val feeLabel = stringResource(R.string.network_fee)
 
     SendStepScreen(
@@ -1175,7 +1176,7 @@ fun SendFeeEditorScreen(
     ) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                "Set your network fee",
+                tr(R.string.kp_set_your_network_fee_2787a),
                 color = colors.textPrimary,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
@@ -1468,7 +1469,7 @@ private fun KaspaKeypadKeyButton(key: KaspaKeypadKey, onKey: (KaspaKeypadKey) ->
     val shape = RoundedCornerShape(16.dp)
     val description = when (key) {
         is KaspaKeypadKey.Digit -> key.value.toString()
-        KaspaKeypadKey.Decimal -> "Decimal point"
+        KaspaKeypadKey.Decimal -> tr(R.string.kp_decimal_point_429e5)
         KaspaKeypadKey.Delete, KaspaKeypadKey.Clear -> stringResource(R.string.delete)
     }
     Box(

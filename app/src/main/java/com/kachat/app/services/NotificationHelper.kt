@@ -6,11 +6,13 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.kachat.app.MainActivity
 import com.kachat.app.R
 import com.kachat.app.repository.AppSettingsRepository
+import com.kachat.app.util.tr
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,8 +54,11 @@ class NotificationHelper @Inject constructor(
             val manager = context.getSystemService(NotificationManager::class.java)
             CHANNELS.forEach { (channelId, soundOn, vibrationOn) ->
                 // KaChat Wallet: its notifications are receipts and .kachat events, and the icon
-                // never carries a badge (iOS wallet a8dc101) - no launcher dot either.
-                val channel = NotificationChannel(channelId, "Wallet", NotificationManager.IMPORTANCE_HIGH).apply {
+                // never carries a badge (iOS wallet a8dc101) - no launcher dot either. All four
+                // carry the same notifications; each is named for its sound/vibration so the
+                // system's list tells them apart (re-creating a channel renames it in place).
+                val channelName = context.getString(channelNameRes(soundOn, vibrationOn))
+                val channel = NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "Received KAS and .kachat names"
                     enableVibration(vibrationOn)
                     if (!soundOn) setSound(null, null)
@@ -135,6 +140,9 @@ class NotificationHelper @Inject constructor(
             .setContentTitle(title)
             .setContentText(text)
             .setAutoCancel(true)
+            // The lock screen shows only a neutral line, never the name or an amount.
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicVersion(channelFor(soundEnabled, vibrationEnabled), R.string.notif_public_kachat_name))
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setSilent(!soundEnabled && !vibrationEnabled)
@@ -183,6 +191,9 @@ class NotificationHelper @Inject constructor(
             .setContentTitle(title)
             .setContentText(text)
             .setAutoCancel(true)
+            // The lock screen shows only a neutral line, never the amount or the address.
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicVersion(channelFor(soundEnabled, vibrationEnabled), R.string.notif_public_received))
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setSilent(!soundEnabled && !vibrationEnabled)
@@ -193,6 +204,14 @@ class NotificationHelper @Inject constructor(
             NotificationManagerCompat.from(context).notify(notificationId, notification)
         } catch (_: SecurityException) {}
     }
+
+    /** The stand-in a locked screen shows for a [NotificationCompat.VISIBILITY_PRIVATE]
+     *  notification: the app's icon and name with one neutral line. */
+    private fun publicVersion(channelId: String, @StringRes text: Int) =
+        NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.ic_kachat_wallet_notification)
+            .setContentTitle(tr(text))
+            .build()
 
     companion object {
         const val CHANNEL_ID = "kachat_messages_sound_vibrate"
@@ -216,6 +235,14 @@ class NotificationHelper @Inject constructor(
             Triple("kachat_messages_vibrate_only", false, true),
             Triple("kachat_messages_silent", false, false)
         )
+
+        @StringRes
+        private fun channelNameRes(soundEnabled: Boolean, vibrationEnabled: Boolean): Int = when {
+            soundEnabled && vibrationEnabled -> R.string.notif_channel_sound_vibrate
+            soundEnabled -> R.string.notif_channel_sound_only
+            vibrationEnabled -> R.string.notif_channel_vibrate_only
+            else -> R.string.notif_channel_silent
+        }
 
         internal fun channelFor(soundEnabled: Boolean, vibrationEnabled: Boolean) =
             CHANNELS.first { it.second == soundEnabled && it.third == vibrationEnabled }.first

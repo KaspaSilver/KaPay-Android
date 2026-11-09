@@ -92,7 +92,7 @@ fun AppCustomizationScreen(
     onBack: () -> Unit,
     @Suppress("UNUSED_PARAMETER") onNavigateToLanguage: () -> Unit,
     @Suppress("UNUSED_PARAMETER") onNavigateToCurrency: () -> Unit,
-    walletViewModel: WalletViewModel = hiltViewModel(),
+    walletViewModel: WalletViewModel = sharedWalletViewModel(),
 ) {
     AppSettingsPageScaffold(title = stringResource(R.string.customization), onBack = onBack) {
         SettingsFormSection(title = stringResource(R.string.customization)) {
@@ -105,7 +105,7 @@ fun AppCustomizationScreen(
 @Composable
 fun AppSecurityScreen(
     onBack: () -> Unit,
-    walletViewModel: WalletViewModel = hiltViewModel(),
+    walletViewModel: WalletViewModel = sharedWalletViewModel(),
 ) {
     AppSettingsPageScaffold(title = stringResource(R.string.security), onBack = onBack) {
         SettingsFormSection(title = stringResource(R.string.security)) {

@@ -47,6 +47,7 @@ class KaChatApplication : Application(), Configuration.Provider {
         // [base], not `this`: inside attachBaseContext the Application's own applicationContext
         // is still null, and reading prefs through it crashed every launch.
         com.kachat.app.util.KaspaNetwork.init(base)
+        com.kachat.app.util.AppText.init(base)
     }
 
     // @Singleton instances are otherwise only created lazily the first time something actually
@@ -100,6 +101,9 @@ class KaChatApplication : Application(), Configuration.Provider {
     // built at startup - on mainnet too since iOS d36fc42, for address profiles (profilesEnabled).
     @Inject
     lateinit var kachatNamesRegistry: dagger.Lazy<com.kachat.app.services.kachatnames.KachatNamesRegistry>
+
+    @Inject
+    lateinit var knsRevealRecovery: dagger.Lazy<com.kachat.app.services.KnsRevealRecovery>
 
     @Inject
     lateinit var kachatSocialImages: dagger.Lazy<com.kachat.app.services.kachatnames.KachatSocialImageResolver>
@@ -214,7 +218,9 @@ class KaChatApplication : Application(), Configuration.Provider {
         }
 
         // Foreground/background transitions. Nothing keeps the process alive while backgrounded:
-        // the push service and the 15-minute SyncWorker cover a closed app.
+        // the push service and the 15-minute SyncWorker cover a closed app. The node pool reads
+        // the same foreground flag (NotificationHelper.appForegroundFlow): backgrounded, it stops
+        // probing and closes its connections shortly after, so their keepalive pings stop too.
         val foregroundObserver = object : DefaultLifecycleObserver {
             override fun onStop(owner: LifecycleOwner) {
                 // Backgrounded: the Received push shows its banner again.
@@ -273,13 +279,14 @@ class KaChatApplication : Application(), Configuration.Provider {
                         }
                     }
                 }
-                // Nextcloud sync catch-up on launch/foreground: covers users who never
-                // background the app cleanly (force-kill, crash, days of disuse). The day-long
-                // threshold keeps this from ever competing with the hourly on-background cadence.
+                // a .kas commit whose reveal never went out (iOS 2da5f4b)
                 owner.lifecycleScope.launch(Dispatchers.IO + logOnly) {
-                    nextcloudSyncService.get().autoBackupIfDue(
-                        minIntervalMs = com.kachat.app.services.NextcloudSyncService.AUTO_BACKUP_CATCH_UP_INTERVAL_MS
-                    )
+                    knsRevealRecovery.get().resume()
+                }
+                // Nextcloud on launch/foreground: brings in another device's changes, or uploads
+                // a change still owed (force-kill, crash, days of disuse). At most once a minute.
+                owner.lifecycleScope.launch(Dispatchers.IO + logOnly) {
+                    nextcloudSyncService.get().syncWithServerOnOpen()
                 }
             }
         }

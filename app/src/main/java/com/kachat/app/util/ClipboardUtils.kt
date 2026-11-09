@@ -66,14 +66,77 @@ fun copyPrivateKeyWithAutoWipe(context: Context, value: String, label: String = 
         }
     }
     clipboard.setPrimaryClip(clip)
-    Handler(Looper.getMainLooper()).postDelayed({
-        val current = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
-        if (current == value) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                clipboard.clearPrimaryClip()
+    pendingClipSecret = value
+    val appContext = context.applicationContext
+    // When it's due survives the process (no secret is written: the label tells ours apart), so
+    // the next return to the app wipes it if the Handler died with the process.
+    appContext.getSharedPreferences(CLIP_WIPE_PREFS, Context.MODE_PRIVATE).edit()
+        .putLong(KEY_WIPE_AT, System.currentTimeMillis() + CLIP_WIPE_DELAY_MS)
+        .putString(KEY_WIPE_LABEL, label)
+        .apply()
+    scheduleClipWipe(appContext, CLIP_WIPE_DELAY_MS)
+}
+
+private const val CLIP_WIPE_PREFS = "kachat_clipboard_wipe"
+private const val KEY_WIPE_AT = "wipe_at"
+private const val KEY_WIPE_LABEL = "label"
+private const val CLIP_WIPE_DELAY_MS = 30_000L
+private val clipWipeToken = Any()
+private val clipWipeHandler by lazy { Handler(Looper.getMainLooper()) }
+
+/** The secret last copied, in memory only; after a process death the clip's label stands in. */
+@Volatile
+private var pendingClipSecret: String? = null
+
+private fun scheduleClipWipe(context: Context, delayMs: Long) {
+    clipWipeHandler.removeCallbacksAndMessages(clipWipeToken)
+    clipWipeHandler.postAtTime({ wipeSensitiveClipIfDue(context) }, clipWipeToken, android.os.SystemClock.uptimeMillis() + delayMs)
+}
+
+/**
+ * Wipes a secret copied by [copyPrivateKeyWithAutoWipe] once its 30 seconds are up: from the
+ * Handler, and from MainActivity whenever the app is back in front, which catches a wipe the
+ * Handler missed (the process died, or it fired while the app couldn't read the clipboard).
+ *
+ * From Android 10 an app that isn't in front reads the clipboard as empty, so a clip it can't
+ * read is wiped too: it's ours or unreadable. A clip it can read is wiped only if it is still
+ * the secret (or, after a process death, still carries its label). A wipe not yet due is
+ * rescheduled.
+ */
+fun wipeSensitiveClipIfDue(context: Context) {
+    val appContext = context.applicationContext
+    val prefs = appContext.getSharedPreferences(CLIP_WIPE_PREFS, Context.MODE_PRIVATE)
+    val wipeAt = prefs.getLong(KEY_WIPE_AT, 0L)
+    if (wipeAt == 0L) return
+    val remaining = wipeAt - System.currentTimeMillis()
+    if (remaining > 0) {
+        scheduleClipWipe(appContext, remaining)
+        return
+    }
+    val label = prefs.getString(KEY_WIPE_LABEL, null)
+    val clipboard = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+    if (clipboard != null) {
+        val clip = try { clipboard.primaryClip } catch (e: Exception) { null }
+        val stillOurs = if (clip == null || clip.itemCount == 0) {
+            true
+        } else {
+            val secret = pendingClipSecret
+            if (secret != null) {
+                clip.getItemAt(0)?.coerceToText(appContext)?.toString() == secret
             } else {
-                clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+                clip.description?.label?.toString() == label
             }
         }
-    }, 30_000L)
+        if (stillOurs) {
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    clipboard.clearPrimaryClip()
+                } else {
+                    clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+                }
+            }
+        }
+    }
+    pendingClipSecret = null
+    prefs.edit().remove(KEY_WIPE_AT).remove(KEY_WIPE_LABEL).apply()
 }

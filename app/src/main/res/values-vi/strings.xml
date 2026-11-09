@@ -3,7 +3,6 @@
     <string name="kas">.kas</string>
     <string name="n_0_00">0.00</string>
     <string name="n_12_words">12 từ</string>
-    <string name="a_kns_inscription_s_commit_transaction">Giao dịch cam kết của một bản khắc KNS đã hoàn tất, nhưng phần tiết lộ chưa bao giờ hoàn thành. Hãy thử lại ngay để hoàn tất; số tiền vẫn an toàn cho đến khi bạn làm điều đó.</string>
     <string name="accept">Chấp nhận</string>
     <string name="account_name">Tên tài khoản</string>
     <string name="active_nodes">Nút đang hoạt động</string>
@@ -20,7 +19,7 @@
     <string name="all_discovered_nodes_sorted_by_state">Tất cả các nút đã phát hiện, sắp xếp theo trạng thái và độ trễ. Các nút được loại trùng theo host:port.</string>
     <string name="amount_kas">Số tiền (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">Bất kỳ ai tham gia cùng tên kênh đều có thể xem và đăng tin nhắn ở đó. Không có chủ sở hữu hay lời mời.</string>
-    <string name="anyone_with_your_seed_phrase_can">Bất kỳ ai có cụm từ khôi phục của bạn đều có thể truy cập tài khoản của bạn. Không bao giờ chia sẻ nó với bất kỳ ai. Đảm bảo bạn chỉ ghi nó ra giấy. Không bao giờ chụp ảnh màn hình hoặc lưu trữ nó trên thiết bị của bạn.</string>
+    <string name="anyone_with_your_seed_phrase_can">Bất kỳ ai có 12 hoặc 24 từ của bạn đều có thể truy cập tài khoản. Đừng bao giờ chia sẻ chúng với ai.</string>
     <string name="back">Quay lại</string>
     <string name="before_you_swap">Trước khi hoán đổi</string>
     <string name="broadcasting">Đang phát sóng...</string>
@@ -111,7 +110,7 @@
     <string name="join">Tham gia</string>
     <string name="join_or_create_a_channel">Tham gia hoặc tạo kênh</string>
     <string name="kas_2">KAS</string>
-    <string name="kns_domains">Tên miền KNS</string>
+    <string name="kns_domains">Tên miền của bạn</string>
     <string name="kachat">KaChat</string>
     <string name="kachat_logo">Logo KaChat</string>
     <string name="kachat_can_t_show_notifications_until">KaPay không thể hiển thị thông báo cho đến khi bạn cho phép chúng cho ứng dụng này.</string>
@@ -187,7 +186,6 @@
     <string name="resolving_domain">Đang phân giải tên miền…</string>
     <string name="retention">Lưu giữ</string>
     <string name="retry">Thu lai</string>
-    <string name="retry_inscription_reveal">Thử lại tiết lộ bản khắc</string>
     <string name="save">Lưu</string>
     <string name="saved_accounts">Tài khoản đã lưu</string>
     <string name="scan">Quét</string>
@@ -199,7 +197,7 @@
     <string name="search_chats">Tìm kiếm cuộc trò chuyện</string>
     <string name="secure_messaging_on_kaspa_blockdag">Nhắn tin bảo mật trên Kaspa BlockDAG</string>
     <string name="security_warning">Cảnh báo bảo mật</string>
-    <string name="seed_phrase">Seed Phrase</string>
+    <string name="seed_phrase">12 hoặc 24 từ</string>
     <string name="select_time">Chọn giờ</string>
     <string name="select_chat">Chọn trò chuyện</string>
     <string name="send">Gửi</string>
@@ -220,7 +218,7 @@
     <string name="swaps_are_processed_by_changenow_a">Các giao dịch hoán đổi được xử lý bởi ChangeNOW, một sàn giao dịch bên thứ ba. Khi tiếp tục, bạn xác nhận đã đọc và đồng ý với Điều khoản dịch vụ riêng của ChangeNOW. KaChat chỉ gửi yêu cầu hoán đổi của bạn và hiển thị trạng thái của nó; KaChat không chịu trách nhiệm về các giao dịch hoán đổi thất bại, bị trễ hoặc bị mất. Nếu một giao dịch hoán đổi không thành công, hãy liên hệ trực tiếp với bộ phận hỗ trợ ChangeNOW.</string>
     <string name="tap_an_address_below_to_swap">Chạm vào một địa chỉ bên dưới để hoán đổi từ đó</string>
     <string name="tap_an_address_below_to_use">Chạm vào một địa chỉ bên dưới để sử dụng nó</string>
-    <string name="tap_to_reveal_seed_phrase">Nhấn để hiện seed phrase</string>
+    <string name="tap_to_reveal_seed_phrase">Chạm để hiện 12 hoặc 24 từ của bạn</string>
     <string name="this_could_take_a_few_minutes">Quá trình này có thể mất vài phút trong khi xác nhận trên chuỗi.</string>
     <string name="this_only_removes_it_from_kachat">Điều này chỉ xóa nó khỏi danh sách theo dõi của KaPay. Nó không ảnh hưởng đến thiết bị KasSigner hoặc bất kỳ khoản tiền nào nó nắm giữ.</string>
     <string name="this_permanently_deletes_every_message_with">Điều này xóa vĩnh viễn mọi tin nhắn với họ trên thiết bị này. Không thể hoàn tác; nhắn tin lại cho họ sẽ bắt đầu một cuộc trò chuyện hoàn toàn mới.</string>
@@ -332,7 +330,7 @@
     <string name="version">Phiên bản</string>
     <string name="vibration">Rung</string>
     <string name="view_profile">Xem hồ sơ</string>
-    <string name="view_seed_phrase">Xem seed phrase</string>
+    <string name="view_seed_phrase">Xem 12 hoặc 24 từ</string>
     <string name="view_in_explorer">Xem trong trình khám phá</string>
     <string name="website">Trang web</string>
     <string name="x">X</string>
@@ -480,7 +478,7 @@
     <!-- .kachat listing, buy and offer (iOS cd9e10c, 0e50fdf) -->
     <string name="kl_offers">Đề nghị</string>
     <string name="kl_offer">Đề nghị</string>
-    <string name="kl_offer_detail">Tự đặt giá. KAS của bạn chờ trên chuỗi cho đến khi người bán chấp nhận, bạn rút đề nghị hoặc đề nghị hết hạn - và bạn có thể nhắn tin cho người bán trước.</string>
+    <string name="kl_offer_detail">Tự đặt giá của bạn. KAS của bạn chờ trên chuỗi cho đến khi người bán chấp nhận, bạn rút đề nghị hoặc đề nghị hết hạn.</string>
     <string name="kl_listing">Tin rao</string>
     <string name="kl_price">Giá</string>
     <string name="kl_buy_now">Mua ngay</string>
@@ -971,7 +969,7 @@
     <string name="create_wallet_name_title">Tạo tên cho ví của bạn</string>
     <string name="create_wallet_name_detail">Tên này chỉ được lưu trên thiết bị này để bạn phân biệt các ví. Không ai khác nhìn thấy nó.</string>
     <string name="create_wallet_seed_next_warning">Màn hình tiếp theo sẽ hiển thị seed phrase của bạn. Đây là cách duy nhất để khôi phục tài khoản: hãy ghi lại, lưu trữ an toàn và đảm bảo không ai nhìn thấy màn hình của bạn.</string>
-    <string name="choose_seed_phrase_length">Chọn độ dài seed phrase</string>
+    <string name="choose_seed_phrase_length">Chọn 12 hoặc 24 từ</string>
     <!-- Create Account, step 3: the seed phrase (iOS CreateWalletSeedStep) -->
     <string name="write_down_your_seed_phrase">Ghi lại seed phrase của bạn</string>
     <string name="store_this_in_a_safe_place_anyone_with_these_words">Lưu trữ ở nơi an toàn. Bất kỳ ai có những từ này đều có thể truy cập tài khoản của bạn.</string>
@@ -1030,9 +1028,9 @@
     <string name="kn_commit_waiting_busy">Mạng đang bận. Cam kết của bạn đang chờ một khối.</string>
     <string name="kn_commit_sent_again">Mạng đang bận nên cam kết đã được gửi lại.</string>
     <!-- Onboarding: import length step and the seed phrase explainer (iOS dd0aab1) -->
-    <string name="import_seed_length_detail">Seed phrase bạn đang nhập có bao nhiêu từ?</string>
+    <string name="import_seed_length_detail">Bạn đang nhập bao nhiêu từ?</string>
     <string name="what_is_this">Đây là gì?</string>
-    <string name="what_is_a_seed_phrase">Seed phrase là gì?</string>
+    <string name="what_is_a_seed_phrase">12 hoặc 24 từ của tôi là gì?</string>
     <string name="seed_phrase_explainer_master_key">Seed phrase là danh sách 12 hoặc 24 từ thông thường, đóng vai trò chìa khóa chính cho tài khoản của bạn. Ví, địa chỉ trò chuyện và tin nhắn của bạn đều đến từ nó.</string>
     <string name="seed_phrase_explainer_anyone">Bất kỳ ai có các từ này đều có thể lấy hết mọi thứ trong tài khoản của bạn. Nếu bạn làm mất chúng và cũng mất thiết bị này, không ai có thể khôi phục tài khoản cho bạn, kể cả KaPay.</string>
     <string name="seed_phrase_explainer_paper">Hãy viết các từ ra giấy theo đúng thứ tự và cất ở nơi an toàn, riêng tư. Đừng bao giờ gõ chúng vào trang web, gửi qua tin nhắn, hay lưu trong ảnh chụp màn hình hoặc ghi chú trên đám mây.</string>
@@ -1048,7 +1046,7 @@
     <string name="cache_web_responses">Phản hồi web</string>
     <string name="cache_web_responses_detail">Bản xem trước liên kết và phản hồi API trong bộ nhớ đệm mạng của hệ thống.</string>
     <string name="cache_temporary_files">Tệp tạm</string>
-    <string name="cache_temporary_files_detail">Tệp tạm khi gửi ảnh và tin nhắn thoại. Có thể xóa bất kỳ lúc nào.</string>
+    <string name="cache_temporary_files_detail">Các tệp tạm thời mà ứng dụng không còn cần. Có thể xóa an toàn bất cứ lúc nào.</string>
     <!-- Import Account, the words screen (iOS ImportWalletView) -->
     <string name="import_words_continue">Tiếp tục</string>
     <!-- .kachat Renew: choose the period first (iOS 26bd5dc) -->
@@ -1379,4 +1377,7 @@
     <string name="kaspa_node_settings_footer">Quét tự động tìm và kết nối với các node tốt nhất. Chọn một node cụ thể chỉ kết nối với node đó, không chuyển sang node khác. Không ảnh hưởng đến trình lập chỉ mục, tên miền hay trình khám phá ở các tab khác. Thêm địa chỉ của bạn vào Sổ địa chỉ IP bên dưới để chọn ở đây.</string>
     <string name="ab_picker_empty_body">Thêm liên hệ trong Ví > Danh bạ.</string>
     <string name="ab_no_contacts">Chưa có liên hệ nào</string>
+    <string name="where_is_this_seed_phrase_from">12 hoặc 24 từ của bạn đến từ đâu?</string>
+    <string name="different_wallets_store_your_kaspa">Mỗi ví lưu Kaspa của bạn ở một đường dẫn địa chỉ khác nhau. Hãy chọn nơi các từ này đến từ để KaPay tìm thấy tiền và tên miền của bạn.</string>
+    <string name="import_words_enter_recovery_phrase">Nhập 12 hoặc 24 từ của bạn</string>
 </resources>

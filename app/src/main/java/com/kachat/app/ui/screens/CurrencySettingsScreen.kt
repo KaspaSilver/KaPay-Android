@@ -29,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.kachat.app.R
 import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
@@ -76,7 +75,7 @@ enum class AppCurrency(val code: String, val currencyName: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CurrencySettingsScreen(onBack: () -> Unit, walletViewModel: WalletViewModel = hiltViewModel()) {
+fun CurrencySettingsScreen(onBack: () -> Unit, walletViewModel: WalletViewModel = sharedWalletViewModel()) {
     val currencyCode by walletViewModel.currency.collectAsState()
     val current = AppCurrency.fromCode(currencyCode)
 

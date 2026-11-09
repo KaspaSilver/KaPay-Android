@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +20,9 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.HourglassEmpty
+import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PanTool
 import androidx.compose.material.icons.outlined.Sell
@@ -97,16 +101,30 @@ import com.kachat.app.services.kachatnames.nowMs
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KachatMarketScreen(onBack: (() -> Unit)?) {
+fun KachatMarketScreen(
+    onBack: (() -> Unit)?,
+    /** Under the balance on the cards: [AccountBackupBanner]. This tab has no title (iOS 953b255). */
+    banner: @Composable () -> Unit = {},
+) {
     // Only where names are live: elsewhere the live model is never built, so it makes no network calls.
     val live: KachatLiveViewModel? = if (KachatLive.isEnabled) hiltViewModel() else null
     // Kept above the full-screen swaps below, so a name's detail returns to the same search and tab
     // (iOS pushes it on a NavigationStack).
-    var page by remember { mutableIntStateOf(0) }
+    // The open page (Marketplace, Available, Expired, Activity), null on the cards (iOS 99ab88a).
+    var page by remember { mutableStateOf<Int?>(null) }
     var searchText by remember { mutableStateOf("") }
     var liveSheet by remember { mutableStateOf<KachatHubSheet?>(null) }
     if (live != null) {
         LaunchedEffect(Unit) { live.start() }
+    }
+    // The Marketplace page, opened by `kapay://market` (iOS 953b255 `takePendingMarketplace`):
+    // taken once the screen is up, like the pending name below.
+    val pendingMarketplace by KachatDeepLink.pendingMarketplace.collectAsState()
+    LaunchedEffect(pendingMarketplace) {
+        if (!pendingMarketplace) return@LaunchedEffect
+        kotlinx.coroutines.delay(400)
+        KachatDeepLink.pendingMarketplace.value = false
+        page = 0
     }
     // A name a tapped notification pointed at (where names are live).
     // One name screen at a time (iOS b799091): the same name again leaves the open one as it is,
@@ -169,8 +187,17 @@ fun KachatMarketScreen(onBack: (() -> Unit)?) {
         }
     }
     if (onBack != null) BackHandler(onBack = onBack)
+    val closePage = {
+        page = null
+        searchText = ""
+    }
+    BackHandler(enabled = page != null, onBack = closePage)
     val colors = LocalAppColors.current
     var showHowItWorks by remember { mutableStateOf(false) }
+    val pageTitles = listOf(
+        stringResource(R.string.km_marketplace), stringResource(R.string.kn_available),
+        stringResource(R.string.kn_status_expired), stringResource(R.string.km_activity)
+    )
     // (smart-casts `live` to non-null where it is true)
     val isLive = live?.isLive == true
     // Pull to refresh on testnet only; mainnet has nothing to refresh.
@@ -187,143 +214,183 @@ fun KachatMarketScreen(onBack: (() -> Unit)?) {
         // Runs on under the dock, as iOS's content runs on under its tab bar.
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         topBar = {
-            // iOS's bar: the connection dot on glass leading, the chatting balance as the principal
-            // item - the marketplace buys with the chatting address, like every other screen pays
-            // (iOS 6e938ff) - and the claims button and "?" on one piece of glass trailing.
-            HubSectionTopBar(onBack = onBack) {
-                // names being claimed: shown only while there are some (iOS b219bb0)
-                if (live != null) KachatClaimsButton(live)
-                ToolbarIconButton(
-                    Icons.Outlined.HelpOutline,
-                    stringResource(R.string.km_how_it_works),
-                    onClick = { showHowItWorks = true },
-                    iconSize = HubHelpIconSize,
+            val shownPage = page
+            if (shownPage != null) {
+                // A page's own screen: Back, its name, the claims button (iOS 99ab88a pageScreen).
+                IosToolbarRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(colors.background)
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    leading = {
+                        ToolbarGlassGroup {
+                            ToolbarIconButton(Icons.Filled.ArrowBackIosNew, stringResource(R.string.back), closePage, tint = colors.textPrimary, iconSize = 20.dp)
+                        }
+                    },
+                    principal = {
+                        Text(pageTitles[shownPage], color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1)
+                    },
+                    trailing = { if (live != null) ToolbarGlassGroup { KachatClaimsButton(live) } },
                 )
+            } else {
+                // iOS's bar: the connection dot on glass leading, the balance as the principal
+                // item, and the claims button and "?" on one piece of glass trailing; the backup
+                // strip under it (iOS 953b255).
+                Column {
+                HubSectionTopBar(onBack = onBack) {
+                    // names being claimed: shown only while there are some (iOS b219bb0)
+                    if (live != null) KachatClaimsButton(live)
+                    ToolbarIconButton(
+                        Icons.Outlined.HelpOutline,
+                        stringResource(R.string.km_how_it_works),
+                        onClick = { showHowItWorks = true },
+                        iconSize = HubHelpIconSize,
+                    )
+                }
+                banner()
+                }
             }
         }
     ) { padding ->
-      // A sideways swipe moves between the four tabs (iOS wallet 040f91a pageSwipe()).
-      Box(Modifier.fillMaxSize().padding(padding).then(if (isLive) Modifier.nestedScroll(pullState.nestedScrollConnection) else Modifier)
-          .kachatPageSwipe(pageCount = 4, page = { page }, onPage = { page = it })) {
+      Box(Modifier.fillMaxSize().padding(padding).then(if (isLive) Modifier.nestedScroll(pullState.nestedScrollConnection) else Modifier)) {
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = LocalDockInset.current + 24.dp),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                // a page: 8 under the bar; the cards' hero has its own (iOS 99ab88a pageScreen)
+                .padding(top = if (page != null) 8.dp else 0.dp, bottom = LocalDockInset.current + 24.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // Hero: the logo and the testnet / setting-up status - no title or description, so
-            // the search sits higher (iOS 27a4f39).
-            Column(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // the wordmark, 56 tall (iOS KachatTabIcon.view(side: 56))
-                com.kachat.app.ui.KachatWordmark(56.dp)
-                if (isLive) {
-                    KachatTestnetBadge()
-                } else if (KachatLive.isEnabled && live?.upgrading == true) {
-                    // the bundled manifest is for the previous registry: a calm "setting up", no
-                    // error (iOS d2e0673)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            val shownPage = page
+            if (shownPage == null) {
+                // Hero: the logo and the testnet / setting-up status - no title or description, so
+                // the search sits higher (iOS 27a4f39).
+                Column(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // the wordmark, 56 tall (iOS KachatTabIcon.view(side: 56))
+                    com.kachat.app.ui.KachatWordmark(56.dp)
+                    if (isLive) {
                         KachatTestnetBadge()
-                        SettingUpPill()
-                    }
-                    Text(
-                        stringResource(R.string.kn_registry_being_upgraded),
-                        color = colors.textSecondary,
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 32.dp)
-                    )
-                } else {
-                    ComingSoonPill()
-                    // Testnet, but the manifest did not verify: the mockup, and why.
-                    val setupError = live?.setupError
-                    if (live != null && live.ready == false && setupError != null) {
+                    } else if (KachatLive.isEnabled && live?.upgrading == true) {
+                        // the bundled manifest is for the previous registry: a calm "setting up", no
+                        // error (iOS d2e0673)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            KachatTestnetBadge()
+                            SettingUpPill()
+                        }
                         Text(
-                            LocalContext.current.kachatErrorText(setupError),
+                            stringResource(R.string.kn_registry_being_upgraded),
                             color = colors.textSecondary,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 32.dp)
                         )
-                    }
-                }
-            }
-            // Search
-            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(colors.surface).padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = colors.textSecondary)
-                    TextField(
-                        value = searchText,
-                        onValueChange = { searchText = it },
-                        placeholder = { Text(stringResource(R.string.km_find_a_name), color = colors.textSecondary) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrect = false),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            focusedTextColor = colors.textPrimary,
-                            unfocusedTextColor = colors.textPrimary,
-                            cursorColor = KaspaTeal,
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(".kachat", color = colors.textSecondary, fontWeight = FontWeight.SemiBold)
-                }
-                val typed = searchText.trim().lowercase()
-                if (typed.isNotEmpty() && isLive) {
-                    KachatLiveSearchResult(
-                        live, typed,
-                        onOpen = { liveSheet = KachatHubSheet.Detail(it) },
-                        onClaim = { liveSheet = KachatHubSheet.Claim(it) },
-                    )
-                } else if (typed.isNotEmpty()) {
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(colors.surface).padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("$typed.kachat", color = colors.textPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(stringResource(R.string.km_registration_not_open), color = colors.textSecondary, fontSize = 12.sp)
+                    } else {
+                        ComingSoonPill()
+                        // Testnet, but the manifest did not verify: the mockup, and why.
+                        val setupError = live?.setupError
+                        if (live != null && live.ready == false && setupError != null) {
+                            Text(
+                                LocalContext.current.kachatErrorText(setupError),
+                                color = colors.textSecondary,
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 32.dp)
+                            )
                         }
-                        Button(onClick = {}, enabled = false) { Text(stringResource(R.string.km_claim)) }
                     }
                 }
-            }
-            // Registrations in flight: the claims button in the top bar (KachatClaimsButton, iOS b219bb0).
-            HubUnderlineTabBar(
-                // Names for sale, expired names anyone may claim, names in their grace period
-                // (counting down to release), and everything that happens in the registry. Your own
-                // names (and the offers you made) live in Profile > Your Domains (iOS 0765ce0,
-                // eea52b2, cb3c27d; this order 73128b3).
-                titles = listOf(
-                    stringResource(R.string.km_marketplace), stringResource(R.string.kn_available),
-                    stringResource(R.string.kn_status_expired), stringResource(R.string.km_activity)
-                ),
-                selectedIndex = page,
-                onSelect = { page = it },
-            )
-            // Live, or not launched here (mainnet): the same pages - empty on mainnet, where `live`
-            // is null (iOS 7227d69). The placeholder pages remain only for a testnet registry that
-            // is setting up.
-            if (isLive || !com.kachat.app.services.kachatnames.KachatNamesService.isLaunched) {
-                when (page) {
-                    0 -> KachatLiveMarketPage(live, onOpen = { liveSheet = KachatHubSheet.Detail(it) })
-                    1 -> KachatLiveAvailablePage(
-                        live,
-                        onOpen = { liveSheet = KachatHubSheet.Detail(it) },
-                        onClaim = { liveSheet = KachatHubSheet.Claim(it) },
-                    )
-                    2 -> KachatLiveExpiredPage(live, onOpen = { liveSheet = KachatHubSheet.Detail(it) })
-                    else -> KachatLiveActivityPage(live)
+                // A card per page, with how many live there (iOS 99ab88a pageCards). Registrations in
+                // flight: the claims button in the top bar (KachatClaimsButton, iOS b219bb0).
+                val counts = if (isLive && live.loaded && live.loadError == null) {
+                    listOf(live.listings.size, live.lapsed.size, live.grace.size, live.activity.size)
+                } else {
+                    listOf(null, null, null, null)
+                }
+                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    for (row in listOf(0, 2)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            for (index in row..row + 1) {
+                                KachatHubCard(
+                                    title = pageTitles[index],
+                                    icon = KACHAT_PAGE_ICONS[index],
+                                    count = counts[index],
+                                    onClick = { page = index },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
                 }
             } else {
-                when (page) {
-                    0 -> MarketPage(onOpenListing = { openListing = true })
-                    1 -> AvailablePage()
-                    2 -> ExpiredPage()
-                    else -> ActivityPage()
+                // Only the Marketplace has the name search.
+                if (shownPage == 0) {
+                    // Search
+                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(colors.surface).padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = colors.textSecondary)
+                            TextField(
+                                value = searchText,
+                                onValueChange = { searchText = it },
+                                placeholder = { Text(stringResource(R.string.km_find_a_name), color = colors.textSecondary) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrect = false),
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    focusedTextColor = colors.textPrimary,
+                                    unfocusedTextColor = colors.textPrimary,
+                                    cursorColor = KaspaTeal,
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(".kachat", color = colors.textSecondary, fontWeight = FontWeight.SemiBold)
+                        }
+                        val typed = searchText.trim().lowercase()
+                        if (typed.isNotEmpty() && isLive) {
+                            KachatLiveSearchResult(
+                                live, typed,
+                                onOpen = { liveSheet = KachatHubSheet.Detail(it) },
+                                onClaim = { liveSheet = KachatHubSheet.Claim(it) },
+                            )
+                        } else if (typed.isNotEmpty()) {
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(colors.surface).padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("$typed.kachat", color = colors.textPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(stringResource(R.string.km_registration_not_open), color = colors.textSecondary, fontSize = 12.sp)
+                                }
+                                Button(onClick = {}, enabled = false) { Text(stringResource(R.string.km_claim)) }
+                            }
+                        }
+                    }
+                }
+                // Live, or not launched here (mainnet): the same pages - empty on mainnet, where `live`
+                // is null (iOS 7227d69). The placeholder pages remain only for a testnet registry that
+                // is setting up.
+                if (isLive || !com.kachat.app.services.kachatnames.KachatNamesService.isLaunched) {
+                    when (shownPage) {
+                        0 -> KachatLiveMarketPage(live, onOpen = { liveSheet = KachatHubSheet.Detail(it) })
+                        1 -> KachatLiveAvailablePage(
+                            live,
+                            onOpen = { liveSheet = KachatHubSheet.Detail(it) },
+                            onClaim = { liveSheet = KachatHubSheet.Claim(it) },
+                        )
+                        2 -> KachatLiveExpiredPage(live, onOpen = { liveSheet = KachatHubSheet.Detail(it) })
+                        else -> KachatLiveActivityPage(live)
+                    }
+                } else {
+                    when (shownPage) {
+                        0 -> MarketPage(onOpenListing = { openListing = true })
+                        1 -> AvailablePage()
+                        2 -> ExpiredPage()
+                        else -> ActivityPage()
+                    }
                 }
             }
         }
@@ -352,6 +419,49 @@ fun KachatMarketScreen(onBack: (() -> Unit)?) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }
+    }
+}
+
+/** iOS's tag, checkmark.seal, hourglass and clock.arrow.circlepath, in the pages' order. */
+private val KACHAT_PAGE_ICONS = listOf(Icons.Outlined.Sell, Icons.Outlined.Verified, Icons.Outlined.HourglassEmpty, Icons.Outlined.History)
+
+/** One page's card on the .kachat screen: what it is and how many live there (null until the
+ *  registry has answered). */
+@Composable
+private fun KachatHubCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    count: Int?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalAppColors.current
+    Column(
+        modifier = modifier
+            .kachatGlass(colors)
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = KaspaTeal, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.weight(1f))
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colors.textSecondary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Text(
+            count?.toString() ?: "-",
+            color = colors.textPrimary,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+        )
+        Text(title, color = colors.textSecondary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -385,7 +495,7 @@ internal fun HubSectionTopBar(
                 if (onBack != null && !LocalInHubSection.current) {
                     // iOS 26: the chevron in the label colour on its glass.
                     ToolbarGlassGroup {
-                        ToolbarIconButton(Icons.Filled.ArrowBackIosNew, "Back", onBack, tint = colors.textPrimary, iconSize = 20.dp)
+                        ToolbarIconButton(Icons.Filled.ArrowBackIosNew, tr(R.string.kp_back_b52b3), onBack, tint = colors.textPrimary, iconSize = 20.dp)
                     }
                 }
                 ConnectionDotButton(onClick = { ConnectionStatusOverlayState.open() })
@@ -454,6 +564,10 @@ internal fun HubUnderlineTabBar(
  */
 object KachatDeepLink {
     val pendingName = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+    /** The Marketplace page, asked for by `kapay://market` (iOS 953b255): it survives a cold start
+     *  and sign-in, until the `.kachat` screen takes it. */
+    val pendingMarketplace = kotlinx.coroutines.flow.MutableStateFlow(false)
 }
 
 /** What the live hub shows over itself (iOS NavigationLink / .sheet): a name's detail, or the
@@ -655,9 +769,48 @@ private fun HowRow(icon: ImageVector, title: String, detail: String, tint: Color
 // ---------------------------------------------------------------------------------------------
 
 /**
+ * The guide's fixed two-button footer: Previous left, Next right, same place on every step so it
+ * can be tapped through without chasing buttons. Matches the KaChat setup guide's bar.
+ *
+ * A disabled Previous renders dimmed rather than vanishing, so Next never moves between steps.
+ */
+@Composable
+fun KnsWizardBottomBar(
+    onBack: (() -> Unit)?,
+    onNext: (() -> Unit)?,
+    nextLabel: String = tr(R.string.kp_next_bc981),
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Button(
+            onClick = { onBack?.invoke() },
+            enabled = onBack != null,
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = LocalAppColors.current.surface,
+                contentColor = LocalAppColors.current.textPrimary,
+            ),
+        ) {
+            Text(stringResource(R.string.kg_previous), fontWeight = FontWeight.Bold)
+        }
+        Button(
+            onClick = { onNext?.invoke() },
+            enabled = onNext != null,
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, contentColor = Color.Black),
+        ) {
+            Text(nextLabel, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/**
  * The .kachat names guide: claim a name, how a name works, make it your name, keep it. Opened
- * from Edit KaChat Profile and Profile > Help. About the name only - an avatar, banner and bio
- * are not part of a name (they are the address's profile, set in Edit KaChat Profile; iOS cdc5611).
+ * from Wallet > Help. About the name only - an avatar, banner and bio are not part of a name
+ * (they are the address's profile, set in KaChat or KaPost; iOS 953b255).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1012,17 +1165,20 @@ fun KachatAddressLiveNamesList(
     val upgrading = vm?.service?.registryUpgrading?.collectAsState()?.value == true
     var names by remember { mutableStateOf<List<com.kachat.app.services.kachatnames.NameInfo>>(emptyList()) }
     var loaded by remember { mutableStateOf(vm == null) }
+    var loadFailed by remember { mutableStateOf(false) }
     LaunchedEffect(address, revision) {
         val key = com.kachat.app.services.kachatnames.KachatNamesRegistry.keyOf(address)
         if (vm == null || key == null) { loaded = true; return@LaunchedEffect }
         if (vm.registry.refreshedAt.value == null) vm.registry.refresh()
         // an expired name past grace isn't theirs any more: it's available to anyone (iOS eea52b2)
-        names = try {
-            vm.registry.heldNames(key)
+        // a failed read keeps what's on screen: it isn't "holds no names" (iOS 2da5f4b)
+        try {
+            names = vm.registry.heldNames(key)
+            loadFailed = false
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: Exception) {
-            emptyList()
+            loadFailed = names.isEmpty()
         }
         loaded = true
     }
@@ -1042,6 +1198,13 @@ fun KachatAddressLiveNamesList(
                 !loaded -> Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                     com.kachat.app.ui.theme.IosActivityIndicator(color = KaspaTeal)
                 }
+                loadFailed -> Text(
+                    tr(R.string.kp_couldn_t_load_this_address_s_3b10c),
+                    color = colors.textSecondary,
+                    fontSize = 15.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                )
                 upgrading || names.isEmpty() -> Column(
                     Modifier.fillMaxWidth().padding(vertical = 40.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,

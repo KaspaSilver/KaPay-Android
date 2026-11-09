@@ -1,8 +1,6 @@
 package com.kachat.app.services
 
 import android.util.Log
-import com.kachat.app.models.PendingKnsCommit
-import com.kachat.app.repository.AppSettingsRepository
 import com.kachat.app.util.KaspaAddress
 import com.kachat.app.util.KaspaMass
 import com.kachat.app.util.KaspaTransactionSigner
@@ -13,7 +11,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.ceil
 
 /**
  * Builds and submits KNS commit/reveal inscription transactions — the same commit->reveal
@@ -25,7 +22,7 @@ import kotlin.math.ceil
 class KnsInscriptionEngine @Inject constructor(
     private val networkService: NetworkService,
     private val nodePoolManager: NodePoolManager,
-    private val settings: AppSettingsRepository
+    private val revealRecovery: KnsRevealRecovery
 ) {
     data class CommitResult(
         val commitTxId: String,
@@ -44,14 +41,17 @@ class KnsInscriptionEngine @Inject constructor(
         commitAmountSompi: Long,
         revealAmountSompi: Long,
         revealTargetAddress: String,
-        operationType: String,
         fundingAddress: String,
         fundingPrivateKey: ByteArray,
         ownerPrivateKey: ByteArray,
         /** Where the commit's funding change goes; defaults back to [fundingAddress]. Used when
          *  the primary spending address funds a transfer and its change must land on a fresh
          *  address (see WalletService.transferDomain). */
-        changeAddress: String = fundingAddress
+        changeAddress: String = fundingAddress,
+        /** For [KnsRevealRecovery]: which key signs the reveal (null: the chatting address's) and
+         *  the priority fee it pays. */
+        ownerSpendingIndex: Int? = null,
+        revealPriorityFeeSompi: Long = REVEAL_PRIORITY_FEE_SOMPI
     ): CommitResult = mutex.withLock {
         val api = networkService.kaspaRestApi.value ?: throw IllegalStateException("Network service unavailable")
 
@@ -67,7 +67,12 @@ class KnsInscriptionEngine @Inject constructor(
         val changeScriptHex = KaspaAddress.getScriptPublicKey(changeAddress)
 
         // Node first, REST second - see NodePoolManager.getUtxosByAddress.
-        val utxos = nodePoolManager.getUtxosByAddress(fundingAddress) ?: api.getUtxos(fundingAddress)
+        // Confirmed, not mining rewards, and not coins a send still in flight spent
+        // (NodePoolManager.submittedInputs, iOS 1652437 `unreservedUtxos`).
+        val utxos = nodePoolManager.submittedInputs.unreserved(
+            (nodePoolManager.getUtxosByAddress(fundingAddress) ?: api.getUtxos(fundingAddress))
+                .filter { !it.utxoEntry.isCoinbase && it.utxoEntry.blockDaaScore > 0 }
+        ) { KaspaWalletEngine.outpointKey(it.outpoint) }
         if (utxos.isEmpty()) throw IllegalStateException("No spendable UTXOs available for KNS inscription")
 
         val feeRateSompiPerGram = fetchFeeRate(api)
@@ -96,7 +101,9 @@ class KnsInscriptionEngine @Inject constructor(
         ) {
             throw IllegalStateException(KaspaUtxoSelector.SMALL_SEND_MASS_MESSAGE)
         }
-        if (selection.changeAmount > 0 && KaspaMass.fitsStorageMass(commitInputs, listOf(commitAmountSompi, selection.changeAmount))) {
+        if (selection.changeAmount > 0 && selection.changeOutputPriced &&
+            KaspaMass.fitsStorageMass(commitInputs, listOf(commitAmountSompi, selection.changeAmount))
+        ) {
             outputs.add(RawOutputWithVersion(amount = selection.changeAmount, scriptPublicKey = ScriptPublicKeyWithVersion(changeScriptHex, 0)))
         }
 
@@ -105,29 +112,25 @@ class KnsInscriptionEngine @Inject constructor(
             outputs = outputs
         )
         val signedTx = KaspaTransactionSigner.signTransaction(rawTx, selection.selectedUtxos, fundingPrivateKey)
+        // Filed before the commit goes out: 2 KAS sits at its script until the reveal spends it
+        // (iOS 2da5f4b `KNSRevealRecovery`).
+        val recoveryId = revealRecovery.begin(
+            commitTx = signedTx, commitAddress = commitAddress, redeemScript = redeemScript,
+            commitScriptPubKeyHex = commitScriptPubKeyHex, commitAmountSompi = commitAmountSompi,
+            revealAmountSompi = revealAmountSompi, ownerAddress = fundingAddress, ownerSpendingIndex = ownerSpendingIndex,
+            changeAddress = changeAddress, revealTargetAddress = revealTargetAddress, priorityFeeSompi = revealPriorityFeeSompi
+        )
         // A submit error is checked against the network before it counts (audit IOS-014).
-        val commitTxId = nodePoolManager.submitConfirmingKnown(signedTx, api) {
-            nodePoolManager.submitWaitingForParent(signedTx, allowOrphan = false)
+        val commitTxId = try {
+            nodePoolManager.submitConfirmingKnown(signedTx, api) {
+                nodePoolManager.submitWaitingForParent(signedTx, allowOrphan = false)
+            }
+        } catch (e: Throwable) {
+            revealRecovery.endFlow(recoveryId)
+            throw e
         }
 
         val result = CommitResult(commitTxId, redeemScript, commitScriptPubKeyHex, commitAmountSompi, revealAmountSompi)
-
-        // Persist BEFORE attempting reveal — if reveal fails or the app dies here, the commit
-        // amount is still recoverable on next launch instead of silently stuck. changeAddress is
-        // needed so a retry (possibly after the active spending address has since rotated) still
-        // returns the reveal's leftover change to the same address the commit was funded from.
-        settings.setPendingKnsCommit(
-            PendingKnsCommit(
-                commitTxId = commitTxId,
-                redeemScriptHex = redeemScript.toHex(),
-                commitScriptPubKeyHex = commitScriptPubKeyHex,
-                commitAmountSompi = commitAmountSompi,
-                revealAmountSompi = revealAmountSompi,
-                revealTargetAddress = revealTargetAddress,
-                operationType = operationType,
-                changeAddress = changeAddress
-            )
-        )
 
         result
     }
@@ -138,6 +141,20 @@ class KnsInscriptionEngine @Inject constructor(
         changeAddress: String,
         ownerPrivateKey: ByteArray,
         priorityFeeSompi: Long = REVEAL_PRIORITY_FEE_SOMPI
+    ): String = try {
+        submitReveal(commit, revealTargetAddress, changeAddress, ownerPrivateKey, priorityFeeSompi)
+            .also { revealRecovery.finished(commit.commitTxId) }
+    } finally {
+        // the commit's own send is over, however it went: anything left is now the recovery's
+        revealRecovery.endFlow(commit.commitTxId)
+    }
+
+    private suspend fun submitReveal(
+        commit: CommitResult,
+        revealTargetAddress: String,
+        changeAddress: String,
+        ownerPrivateKey: ByteArray,
+        priorityFeeSompi: Long
     ): String = mutex.withLock {
         val api = networkService.kaspaRestApi.value ?: throw IllegalStateException("Network service unavailable")
 
@@ -229,15 +246,12 @@ class KnsInscriptionEngine @Inject constructor(
             }
         }
 
-        settings.clearPendingKnsCommit()
         revealTxId
     }
 
     private suspend fun fetchFeeRate(api: KaspaRestApi): Long {
         return try {
-            val estimate = api.getFeeEstimate()
-            val quoted = estimate.normalBuckets.firstOrNull()?.feerate ?: KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM.toDouble()
-            ceil(quoted).toLong().coerceAtLeast(KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
+            ColdStorageSendEngine.quotedFeeRate(api.getFeeEstimate().normalBuckets.firstOrNull()?.feerate)
         } catch (e: Exception) {
             Log.w("KnsInscriptionEngine", "Failed to fetch fee estimate, using network minimum", e)
             KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM

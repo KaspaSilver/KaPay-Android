@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import com.kachat.app.util.UserFacingError
 import com.kachat.app.R
 import androidx.compose.ui.res.stringResource
@@ -96,11 +97,13 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -128,19 +131,19 @@ interface NextcloudSettingsDeps {
 
 /**
  * The sections of the Settings > Storage > Nextcloud page ([NextcloudStorageScreen] supplies the
- * Form page around them) - iOS wallet's NextcloudSettingsView (59593af, 5bab351), section for
- * section. The wallet backs up the Address Book and the Portfolio, nothing else.
+ * Form page around them) - iOS's NextcloudSettingsView (953b255), section for section. The wallet
+ * backs up Contacts and the Portfolio, nothing else.
  *
- * Testnet: one row saying Nextcloud is off, with why in the footer.
+ * Testnet: one row saying Nextcloud is off.
  *
  * Not connected: "Server" (address, username and app password as plain rows in one card, the
- * https warning between them, the footer saying what connecting does), an error section when
- * connecting failed, and Connect in a section of its own.
+ * https warning between them), an error section when connecting failed, and Connect in a section of
+ * its own.
  *
- * Connected: Connected Account (server, username); Backup (Automatic Backup, Back Up Now, Restore
- * Backup, then each backup file's last upload - or "No backup on this server yet." - and the
- * outcome of a backup or restore started here) with the footer naming both files; Disconnect,
- * confirmed by an alert, with its footer.
+ * Connected: Connected Account (server, username); what to do when Nextcloud refused the login;
+ * Contact Backup (Automatic Sync, Last synced, Backup Folder, Back Up Contacts Now, the file's last
+ * upload - or "No backup on this server yet."); Portfolio Backup (Back Up Portfolio Now, the newest
+ * file's last upload); the outcome of a backup started here; Disconnect, confirmed by an alert.
  */
 @Composable
 fun NextcloudSettingsSection() {
@@ -153,29 +156,53 @@ fun NextcloudSettingsSection() {
     val backup = remember { deps.nextcloudBackup() }
     val account by service.account.collectAsState()
     val autoBackupEnabled by service.autoBackupEnabled.collectAsState()
+    val lastAutoSyncMs by service.lastAutoSyncMs.collectAsState()
+    val needsReconnect by service.needsReconnect.collectAsState()
+    val contactsSyncError by service.contactsSyncError.collectAsState()
     val scope = rememberCoroutineScope()
     val is24Hour = is24HourClock()
 
     // iOS keeps all of this in the view's own @State: an outcome shows only for what was started
     // on this visit. The work itself runs in NextcloudSyncService's scope, so leaving the page
-    // never cuts a backup or restore off half way.
+    // never cuts a backup off half way.
     var isConnecting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var backupInfo by remember { mutableStateOf(NextcloudService.BackupInfo()) }
     var isBackingUp by remember { mutableStateOf(false) }
-    var isRestoring by remember { mutableStateOf(false) }
     var backupStatusMessage by remember { mutableStateOf<String?>(null) }
     var backupErrorMessage by remember { mutableStateOf<String?>(null) }
-    var showRestoreConfirm by remember { mutableStateOf(false) }
+    var showBackupFolderPicker by remember { mutableStateOf(false) }
     var showDisconnectConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(account?.server) {
         if (account != null) backupInfo = service.fetchWalletBackupInfo()
     }
 
+    // Merge-on-upload: both read the server's copy first, so a manual backup can never undo another
+    // device's newer change, and it brings those changes in here (iOS 953b255).
+    fun backUp(success: String, work: () -> kotlinx.coroutines.Deferred<Unit>) {
+        if (isBackingUp) return
+        isBackingUp = true
+        backupStatusMessage = null
+        backupErrorMessage = null
+        scope.launch {
+            try {
+                work().await()
+                backupInfo = service.fetchWalletBackupInfo()
+                backupStatusMessage = success
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                backupErrorMessage = UserFacingError.message(e, "Backup failed")
+            } finally {
+                isBackingUp = false
+            }
+        }
+    }
+
     // Testnet: Nextcloud is off until mainnet is back (iOS af8ec68).
     if (service.isOffForTestnet) {
-        SettingsFormSection(title = null, footer = stringResource(R.string.ncw_off_on_testnet_footer)) {
+        SettingsFormSection(title = null) {
             Row(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -200,10 +227,7 @@ fun NextcloudSettingsSection() {
         val serverIsPlainHttp = server.trim().lowercase().startsWith("http://")
         val useHttps = stringResource(R.string.nc_use_https)
 
-        NcFormSection(
-            title = stringResource(R.string.nc_server),
-            footers = listOf(stringResource(R.string.ncw_server_footer)),
-        ) {
+        SettingsFormSection(title = stringResource(R.string.nc_server)) {
             NcFormField(
                 value = server,
                 onValueChange = { server = it },
@@ -285,72 +309,83 @@ fun NextcloudSettingsSection() {
             NcValueRow(stringResource(R.string.nc_username), connected.username)
         }
 
-        NcFormSection(
-            title = stringResource(R.string.ncw_backup),
-            footers = listOf(
-                stringResource(
-                    R.string.ncw_backup_footer,
-                    NextcloudService.ADDRESS_BOOK_FILE_NAME,
-                    NextcloudService.PORTFOLIO_FILE_NAME,
-                    NextcloudService.BACKUP_FOLDER_NAME,
-                ),
-            ),
-        ) {
-            SettingsSwitchItem(stringResource(R.string.ncw_automatic_backup), autoBackupEnabled) { enabled ->
-                backup.setAutoBackupEnabled(enabled)
+        if (needsReconnect) {
+            SettingsFormSection(title = null) {
+                NcCaptionRow(tr(R.string.kp_nextcloud_refused_this_login_disconnect_then_ad7fe), colors.danger)
             }
-            SettingsDivider()
-            NcLabelButtonRow(
-                label = stringResource(R.string.ncw_back_up_now),
-                icon = Icons.Outlined.UploadFile,
-                enabled = !isBackingUp && !isRestoring,
-                busy = isBackingUp,
-            ) {
-                isBackingUp = true
-                backupStatusMessage = null
-                backupErrorMessage = null
-                scope.launch {
-                    try {
-                        backup.backUpNowAsync().await()
-                        backupInfo = service.fetchWalletBackupInfo()
-                        backupStatusMessage = context.getString(R.string.ncw_backed_up_message)
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        backupErrorMessage = UserFacingError.message(e, "Backup failed")
-                    } finally {
-                        isBackingUp = false
-                    }
-                }
-            }
-            SettingsDivider(inset = IosRowTextInset)
-            NcLabelButtonRow(
-                label = stringResource(R.string.ncw_restore_backup),
-                icon = Icons.Outlined.FileDownload,
-                enabled = !isBackingUp && !isRestoring && !backupInfo.isEmpty,
-                busy = isRestoring,
-            ) {
-                showRestoreConfirm = true
-            }
-            SettingsDivider(inset = IosRowTextInset)
-            if (backupInfo.isEmpty) {
-                NcCaptionRow(stringResource(R.string.nc_no_backup_yet), colors.textSecondary)
-            } else {
-                NcBackupFileRow(stringResource(R.string.ab_address_book), backupInfo.addressBook, is24Hour)
-                SettingsDivider()
-                NcBackupFileRow(stringResource(R.string.portfolio), backupInfo.portfolio, is24Hour)
-            }
-            backupStatusMessage?.let { message ->
-                SettingsDivider()
-                NcCaptionRow(message, colors.success)
-            }
-            backupErrorMessage?.let { message ->
-                SettingsDivider()
+        }
+
+        // Why the contacts last failed to sync (another account's file in the Backup Folder,
+        // say): it stays here until a sync succeeds or the folder changes.
+        contactsSyncError?.takeIf { !needsReconnect }?.let { message ->
+            SettingsFormSection(title = null) {
                 NcCaptionRow(message, colors.danger)
             }
         }
 
-        SettingsFormSection(title = null, footer = stringResource(R.string.ncw_disconnect_footer)) {
+        SettingsFormSection(
+            title = tr(R.string.kp_contact_backup_31fab),
+            footer = tr(R.string.kp_your_contacts_are_backed_up_here_78c34),
+        ) {
+            SettingsSwitchItem(stringResource(R.string.nc_automatic_sync), autoBackupEnabled) { enabled ->
+                backup.setAutoBackupEnabled(enabled)
+            }
+            lastAutoSyncMs?.let { lastSynced ->
+                SettingsDivider()
+                NcValueRow(
+                    stringResource(R.string.nc_last_synced),
+                    com.kachat.app.util.IosDateStyle.mediumDateShortTime(lastSynced, is24Hour),
+                    caption = true,
+                )
+            }
+            SettingsDivider()
+            val backupFolder = connected.backupFolder
+            NcValueRow(
+                label = stringResource(R.string.nc_backup_folder),
+                value = when {
+                    backupFolder == null -> stringResource(R.string.nc_default_folder, NextcloudService.BACKUP_FOLDER_NAME)
+                    backupFolder.isEmpty() -> stringResource(R.string.pnc_all_files)
+                    else -> backupFolder
+                },
+                truncation = NcTruncation.HEAD,
+                onClick = { showBackupFolderPicker = true },
+            )
+            SettingsDivider()
+            NcLabelButtonRow(
+                label = tr(R.string.kp_back_up_contacts_now_2a9bd),
+                icon = Icons.Outlined.UploadFile,
+                enabled = !isBackingUp,
+                busy = isBackingUp,
+            ) {
+                backUp(tr(R.string.kp_contacts_backed_up_0904f)) { backup.backUpContactsNowAsync() }
+            }
+            NcLastBackupRow(backupInfo.contacts, is24Hour)
+        }
+
+        SettingsFormSection(
+            title = tr(R.string.kp_portfolio_backup_fe098),
+            // iOS 1652437's new wording; English until strings_kapay.xml carries its translations
+            footer = tr(R.string.kp_each_portfolio_has_its_own_file_934c3),
+        ) {
+            NcLabelButtonRow(
+                label = tr(R.string.kp_back_up_portfolio_now_210ae),
+                icon = Icons.Outlined.UploadFile,
+                enabled = !isBackingUp,
+                busy = isBackingUp,
+            ) {
+                backUp(tr(R.string.kp_portfolio_backed_up_9a773)) { backup.backUpPortfolioNowAsync() }
+            }
+            NcLastBackupRow(backupInfo.portfolio, is24Hour)
+        }
+
+        if (backupStatusMessage != null || backupErrorMessage != null) {
+            SettingsFormSection(title = null) {
+                backupStatusMessage?.let { message -> NcCaptionRow(message, colors.success) }
+                backupErrorMessage?.let { message -> NcCaptionRow(message, colors.danger) }
+            }
+        }
+
+        SettingsFormSection(title = null) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -364,38 +399,16 @@ fun NextcloudSettingsSection() {
         }
     }
 
-    if (showRestoreConfirm) {
-        com.kachat.app.ui.theme.IosAlertDialog(
-            onDismissRequest = { showRestoreConfirm = false },
-            containerColor = colors.surface,
-            title = { Text(stringResource(R.string.ncw_restore_backup), color = colors.textPrimary) },
-            text = { Text(stringResource(R.string.ncw_restore_message), color = colors.textSecondary) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showRestoreConfirm = false
-                    isRestoring = true
-                    backupStatusMessage = null
-                    backupErrorMessage = null
-                    scope.launch {
-                        try {
-                            backupStatusMessage = restoreMessage(context, backup.restoreAsync().await())
-                        } catch (e: kotlinx.coroutines.CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            backupErrorMessage = UserFacingError.message(e, "Restore failed")
-                        } finally {
-                            isRestoring = false
-                        }
-                    }
-                }) {
-                    Text(stringResource(R.string.nc_restore), color = KaspaTeal, fontWeight = FontWeight.Bold)
-                }
+    if (showBackupFolderPicker) {
+        NextcloudFolderSelectDialog(
+            service = service,
+            onDismiss = { showBackupFolderPicker = false },
+            onSelect = { path ->
+                showBackupFolderPicker = false
+                service.setBackupFolder(path)
+                // The contacts file lives per folder: re-check what exists at the new destination.
+                scope.launch { backupInfo = service.fetchWalletBackupInfo() }
             },
-            dismissButton = {
-                TextButton(onClick = { showRestoreConfirm = false }) {
-                    Text(stringResource(R.string.cancel), color = colors.textSecondary)
-                }
-            }
         )
     }
     if (showDisconnectConfirm) {
@@ -403,7 +416,12 @@ fun NextcloudSettingsSection() {
             onDismissRequest = { showDisconnectConfirm = false },
             containerColor = colors.surface,
             title = { Text(stringResource(R.string.nc_disconnect_title), color = colors.textPrimary) },
-            text = { Text(stringResource(R.string.nc_disconnect_message), color = colors.textSecondary) },
+            text = {
+                Text(
+                    tr(R.string.kp_this_revokes_the_app_password_on_65220),
+                    color = colors.textSecondary,
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     showDisconnectConfirm = false
@@ -424,30 +442,25 @@ fun NextcloudSettingsSection() {
     }
 }
 
-/** What a restore did, in one line (iOS `restoreMessage`). */
-private fun restoreMessage(context: android.content.Context, result: com.kachat.app.services.NextcloudSyncService.RestoreResult): String {
-    if (!result.changedAnything) return context.getString(R.string.ncw_already_up_to_date)
-    val parts = mutableListOf<String>()
-    if (result.addresses > 0) {
-        parts += context.getString(R.string.ncw_restored_address_book_counts, result.addressesAdded, result.addressesUpdated)
-    }
-    if (result.portfolioChanged) parts += context.getString(R.string.ncw_portfolio_restored)
-    return parts.joinToString(" ")
-}
-
-/** One backup file's last upload, or that it isn't on the server yet (iOS `backupFileRow`):
- *  the date and size in `.caption`, secondary. */
+/** One backup file's last upload, or that it isn't on the server yet (iOS `lastBackupRow`): the
+ *  date and size in `.caption`, secondary. A file whose date the server omitted shows no row. */
 @Composable
-private fun NcBackupFileRow(title: String, file: NextcloudFile?, is24Hour: Boolean) {
+private fun NcLastBackupRow(file: NextcloudFile?, is24Hour: Boolean) {
     val context = LocalContext.current
+    val colors = LocalAppColors.current
     val modified = file?.modifiedMs
-    val value = when {
-        file != null && modified != null -> com.kachat.app.util.IosDateStyle.mediumDateShortTime(modified, is24Hour) +
-            (file.size?.let { " · " + com.kachat.app.util.IosByteCount.format(context, it) } ?: "")
-        file != null -> stringResource(R.string.ncw_backed_up)
-        else -> stringResource(R.string.ncw_not_backed_up_yet)
+    if (file != null && modified != null) {
+        SettingsDivider(inset = IosRowTextInset)
+        NcValueRow(
+            stringResource(R.string.nc_last_backup),
+            com.kachat.app.util.IosDateStyle.mediumDateShortTime(modified, is24Hour) +
+                (file.size?.let { " · " + com.kachat.app.util.IosByteCount.format(context, it) } ?: ""),
+            caption = true,
+        )
+    } else if (file == null) {
+        SettingsDivider(inset = IosRowTextInset)
+        NcCaptionRow(stringResource(R.string.nc_no_backup_yet), colors.textSecondary)
     }
-    NcValueRow(title, value, caption = true)
 }
 
 /** iOS's tertiaryLabel, translucent as iOS draws it: a Form field's placeholder and a disabled
@@ -455,36 +468,6 @@ private fun NcBackupFileRow(title: String, file: NextcloudFile?, is24Hour: Boole
 @Composable
 private fun ncTertiaryLabel(): Color =
     if (LocalAppColors.current.isDark) Color(0x4DEBEBF5) else Color(0x4D3C3C43)
-
-/**
- * A Form section whose footer is several paragraphs, 6 apart (iOS's footer VStack(spacing: 6));
- * with none it is [SettingsFormSection].
- */
-@Composable
-private fun NcFormSection(
-    title: String?,
-    footers: List<String> = emptyList(),
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    if (footers.isEmpty()) {
-        SettingsFormSection(title = title, content = content)
-        return
-    }
-    Column(Modifier.fillMaxWidth()) {
-        SettingsSection(title = title, content = content)
-        SettingsFormFooter(footers.first())
-        footers.drop(1).forEach { paragraph ->
-            Text(
-                text = paragraph,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-                color = LocalAppColors.current.textSecondary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)
-            )
-        }
-        Spacer(Modifier.height(IosFormFooterGap))
-    }
-}
 
 /**
  * A plain Form text field (iOS's TextField / RevealableSecureField in a Form): no box of its own,
@@ -677,6 +660,119 @@ private fun NcLabelButtonRow(
 }
 
 /**
+ * Settings > Storage > Nextcloud > Backup Folder (iOS 953b255, NextcloudFolderSelectView): browses
+ * the connected account's folders from All Files and hands back the one chosen ("" = the files root).
+ */
+@Composable
+private fun NextcloudFolderSelectDialog(
+    service: NextcloudService,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit,
+) {
+    val colors = LocalAppColors.current
+    var pathStack by remember { mutableStateOf(listOf("")) }
+    val currentPath = pathStack.last()
+    var folders by remember { mutableStateOf<List<NextcloudFile>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(currentPath) {
+        isLoading = true
+        errorMessage = null
+        folders = emptyList()
+        try {
+            // Newest-first comes from listFolder; this only drops the non-folder entries.
+            folders = service.listFolder(currentPath).filter { it.isDirectory }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            errorMessage = UserFacingError.message(e, "Could not load this folder.")
+        }
+        isLoading = false
+    }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Column(Modifier.fillMaxSize().background(colors.background).statusBarsPadding().navigationBarsPadding()) {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                SheetBarButton(
+                    stringResource(if (pathStack.size > 1) R.string.back else R.string.cancel),
+                    onClick = { if (pathStack.size > 1) pathStack = pathStack.dropLast(1) else onDismiss() },
+                    modifier = Modifier.align(Alignment.CenterStart),
+                )
+                Text(
+                    currentPath.substringAfterLast('/').ifEmpty { stringResource(R.string.pnc_all_files) },
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 17.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 88.dp),
+                )
+            }
+            HorizontalDivider(color = colors.divider, thickness = 0.5.dp)
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+            ) {
+                SettingsFormSection(title = null, first = true) {
+                    NcLabelButtonRow(
+                        label = if (currentPath.isEmpty()) tr(R.string.kp_use_all_files_bab36) else tr(R.string.kp_use_this_folder_3bfd5),
+                        icon = Icons.Outlined.CheckCircle,
+                        enabled = true,
+                        busy = false,
+                    ) {
+                        onSelect(currentPath)
+                    }
+                }
+                val message = errorMessage
+                if (folders.isNotEmpty() || message != null || !isLoading) {
+                    SettingsFormSection(title = null) {
+                        folders.forEachIndexed { index, folder ->
+                            if (index > 0) SettingsDivider(inset = IosRowTextInset)
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { pathStack = pathStack + folder.path.trim('/') }
+                                    .heightIn(min = 52.dp)
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.Folder, contentDescription = null, tint = KaspaTeal, modifier = Modifier.size(24.dp))
+                                Spacer(Modifier.width(16.dp))
+                                Text(
+                                    folder.name,
+                                    color = colors.textPrimary,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.textSecondary)
+                            }
+                        }
+                        if (message != null) NcCaptionRow(message, colors.danger)
+                        if (!isLoading && folders.isEmpty() && message == null) {
+                            Box(
+                                Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 14.dp),
+                                contentAlignment = Alignment.CenterStart,
+                            ) {
+                                Text(tr(R.string.kp_no_subfolders_fd56f), color = colors.textSecondary, style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * Pick one file from the connected Nextcloud (iOS aa5d783, NextcloudFileSelectView): browsing
  * starts in the KaChat folder, with All Files for the root; only [allowedExtensions] can be picked
  * and other files show dimmed. A KaChat folder that doesn't exist yet reads as empty rather than an
@@ -690,7 +786,7 @@ fun NextcloudFileSelectDialog(
     onPick: (NextcloudFile) -> Unit,
 ) {
     val colors = LocalAppColors.current
-    val kachatFolder = service.backupFolderPath.trim('/')
+    val kachatFolder = NextcloudService.BACKUP_FOLDER_NAME
     var pathStack by remember { mutableStateOf(listOf(kachatFolder)) }
     val currentPath = pathStack.last()
     var entries by remember { mutableStateOf<List<NextcloudFile>>(emptyList()) }

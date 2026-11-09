@@ -3,7 +3,6 @@
     <string name="kas">.kas</string>
     <string name="n_0_00">0.00</string>
     <string name="n_12_words">12단어</string>
-    <string name="a_kns_inscription_s_commit_transaction">KNS 인스크립션의 커밋 거래가 완료되었지만 리빌이 완료되지 않았습니다. 지금 다시 시도하여 완료하세요. 완료할 때까지 자금은 안전하게 묶여 있습니다.</string>
     <string name="accept">수락</string>
     <string name="account_name">계정 이름</string>
     <string name="active_nodes">활성 노드</string>
@@ -20,7 +19,7 @@
     <string name="all_discovered_nodes_sorted_by_state">검색된 모든 노드를 상태와 지연 시간으로 정렬합니다. 노드는 host:port로 중복 제거됩니다.</string>
     <string name="amount_kas">금액 (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">동일한 채널 이름에 참여한 사람은 누구나 메시지를 보고 게시할 수 있습니다. 소유자나 초대가 없습니다.</string>
-    <string name="anyone_with_your_seed_phrase_can">시드 문구를 가진 사람은 누구나 당신의 계정에 접근할 수 있습니다. 절대 누구와도 공유하지 마세요. 반드시 종이에 적어두기만 하세요. 절대 스크린샷을 찍거나 기기에 저장하지 마세요.</string>
+    <string name="anyone_with_your_seed_phrase_can">12개 또는 24개 단어를 가진 사람은 누구나 계정에 접근할 수 있습니다. 절대 다른 사람과 공유하지 마세요.</string>
     <string name="back">뒤로</string>
     <string name="before_you_swap">스왑하기 전</string>
     <string name="broadcasting">방송 중...</string>
@@ -111,7 +110,7 @@
     <string name="join">참여</string>
     <string name="join_or_create_a_channel">채널 참여 또는 만들기</string>
     <string name="kas_2">KAS</string>
-    <string name="kns_domains">KNS 도메인</string>
+    <string name="kns_domains">내 도메인</string>
     <string name="kachat">KaChat</string>
     <string name="kachat_logo">KaChat 로고</string>
     <string name="kachat_can_t_show_notifications_until">이 앱에 대한 알림을 허용할 때까지 KaPay은 알림을 표시할 수 없습니다.</string>
@@ -187,7 +186,6 @@
     <string name="resolving_domain">도메인 확인 중…</string>
     <string name="retention">보관</string>
     <string name="retry">재시도</string>
-    <string name="retry_inscription_reveal">인스크립션 리빌 다시 시도</string>
     <string name="save">저장</string>
     <string name="saved_accounts">저장된 계정</string>
     <string name="scan">스캔</string>
@@ -199,7 +197,7 @@
     <string name="search_chats">채팅 검색</string>
     <string name="secure_messaging_on_kaspa_blockdag">Kaspa BlockDAG에서 안전한 메시징</string>
     <string name="security_warning">보안 경고</string>
-    <string name="seed_phrase">Seed Phrase</string>
+    <string name="seed_phrase">12개 또는 24개 단어</string>
     <string name="select_time">시간 선택</string>
     <string name="select_chat">채팅 선택</string>
     <string name="send">보내기</string>
@@ -220,7 +218,7 @@
     <string name="swaps_are_processed_by_changenow_a">스왑은 타사 거래소인 ChangeNOW에서 처리됩니다. 계속하면 ChangeNOW 자체 서비스 약관을 읽고 동의했음을 확인하는 것입니다. KaChat은 스왑 요청을 제출하고 상태를 표시할 뿐입니다; KaChat은 실패, 지연 또는 손실된 스왑에 대해 책임을 지지 않습니다. 스왑이 진행되지 않으면 ChangeNOW 지원팀에 직접 문의하세요.</string>
     <string name="tap_an_address_below_to_swap">아래 주소를 탭하여 그곳에서 스왑하세요</string>
     <string name="tap_an_address_below_to_use">아래 주소를 탭하여 사용하세요</string>
-    <string name="tap_to_reveal_seed_phrase">탭하여 seed phrase 보기</string>
+    <string name="tap_to_reveal_seed_phrase">탭하여 12개 또는 24개 단어 보기</string>
     <string name="this_could_take_a_few_minutes">체인에서 확인되는 동안 몇 분 정도 걸릴 수 있습니다.</string>
     <string name="this_only_removes_it_from_kachat">이는 KaPay의 감시 목록에서만 제거합니다. KasSigner 기기나 보유한 자금에는 영향을 미치지 않습니다.</string>
     <string name="this_permanently_deletes_every_message_with">이는 이 기기에서 그들과의 모든 메시지를 영구적으로 삭제합니다. 되돌릴 수 없습니다; 다시 메시지를 보내면 완전히 새로운 대화가 시작됩니다.</string>
@@ -332,7 +330,7 @@
     <string name="version">버전</string>
     <string name="vibration">진동</string>
     <string name="view_profile">프로필 보기</string>
-    <string name="view_seed_phrase">Seed Phrase 보기</string>
+    <string name="view_seed_phrase">12개 또는 24개 단어 보기</string>
     <string name="view_in_explorer">탐색기에서 보기</string>
     <string name="website">웹사이트</string>
     <string name="x">X</string>
@@ -480,7 +478,7 @@
     <!-- .kachat listing, buy and offer (iOS cd9e10c, 0e50fdf) -->
     <string name="kl_offers">제안</string>
     <string name="kl_offer">제안</string>
-    <string name="kl_offer_detail">원하는 가격을 제시하세요. KAS는 판매자가 수락하거나, 제안을 철회하거나, 만료될 때까지 체인에서 대기합니다. 먼저 판매자에게 메시지를 보낼 수도 있습니다.</string>
+    <string name="kl_offer_detail">원하는 가격을 제시하세요. 판매자가 수락하거나, 제안을 철회하거나, 기간이 만료될 때까지 KAS는 체인에서 대기합니다.</string>
     <string name="kl_listing">판매 목록</string>
     <string name="kl_price">가격</string>
     <string name="kl_buy_now">지금 구매</string>
@@ -971,7 +969,7 @@
     <string name="create_wallet_name_title">지갑 이름 만들기</string>
     <string name="create_wallet_name_detail">이 이름은 지갑을 구분하기 위해 이 기기에만 저장됩니다. 다른 누구도 볼 수 없습니다.</string>
     <string name="create_wallet_seed_next_warning">다음 화면에 seed phrase가 표시됩니다. 계정을 복구하는 유일한 방법입니다. 적어서 안전하게 보관하고, 아무도 화면을 볼 수 없는지 확인하세요.</string>
-    <string name="choose_seed_phrase_length">seed phrase 길이 선택</string>
+    <string name="choose_seed_phrase_length">12개 또는 24개 단어 선택</string>
     <!-- Create Account, step 3: the seed phrase (iOS CreateWalletSeedStep) -->
     <string name="write_down_your_seed_phrase">Seed Phrase를 적어두세요</string>
     <string name="store_this_in_a_safe_place_anyone_with_these_words">안전한 곳에 보관하세요. 이 단어를 아는 사람은 누구나 계정에 접근할 수 있습니다.</string>
@@ -1030,9 +1028,9 @@
     <string name="kn_commit_waiting_busy">네트워크가 혼잡합니다. 커밋이 블록을 기다리고 있습니다.</string>
     <string name="kn_commit_sent_again">네트워크가 혼잡해 커밋을 다시 보냈습니다.</string>
     <!-- Onboarding: import length step and the seed phrase explainer (iOS dd0aab1) -->
-    <string name="import_seed_length_detail">가져오는 seed phrase는 몇 단어인가요?</string>
+    <string name="import_seed_length_detail">몇 개의 단어를 가져오나요?</string>
     <string name="what_is_this">이게 뭔가요?</string>
-    <string name="what_is_a_seed_phrase">seed phrase란?</string>
+    <string name="what_is_a_seed_phrase">12개 또는 24개 단어란 무엇인가요?</string>
     <string name="seed_phrase_explainer_master_key">seed phrase는 계정의 마스터 키 역할을 하는 12개 또는 24개의 평범한 단어 목록입니다. 지갑, 채팅 주소, 메시지가 모두 여기에서 만들어집니다.</string>
     <string name="seed_phrase_explainer_anyone">이 단어를 가진 사람은 누구나 계정의 모든 것을 가져갈 수 있습니다. 단어를 잃어버리고 이 기기도 잃어버리면 아무도 계정을 되찾을 수 없습니다. KaPay도 마찬가지입니다.</string>
     <string name="seed_phrase_explainer_paper">단어를 순서대로 종이에 적어 안전하고 남이 볼 수 없는 곳에 보관하세요. 웹사이트에 입력하거나, 채팅으로 보내거나, 스크린샷이나 클라우드 메모에 저장하지 마세요.</string>
@@ -1048,7 +1046,7 @@
     <string name="cache_web_responses">웹 응답</string>
     <string name="cache_web_responses_detail">시스템 네트워크 캐시에 보관된 링크 미리보기와 API 응답.</string>
     <string name="cache_temporary_files">임시 파일</string>
-    <string name="cache_temporary_files_detail">사진과 음성 메모를 보낼 때 생긴 임시 파일. 언제든 삭제해도 안전합니다.</string>
+    <string name="cache_temporary_files_detail">앱에 더 이상 필요하지 않은 임시 파일입니다. 언제든 안전하게 제거할 수 있습니다.</string>
     <!-- Import Account, the words screen (iOS ImportWalletView) -->
     <string name="import_words_continue">계속</string>
     <!-- .kachat Renew: choose the period first (iOS 26bd5dc) -->
@@ -1379,4 +1377,7 @@
     <string name="kaspa_node_settings_footer">자동 검색은 사용 가능한 최적의 노드를 찾아 연결합니다. 특정 노드를 선택하면 다른 노드로 전환하지 않고 그 노드에만 연결합니다. 다른 탭의 인덱서, 도메인, 탐색기에는 영향이 없습니다. 여기서 선택하려면 아래 IP 주소록에 주소를 추가하세요.</string>
     <string name="ab_picker_empty_body">지갑 > 연락처에서 연락처를 추가하세요.</string>
     <string name="ab_no_contacts">아직 연락처가 없습니다</string>
+    <string name="where_is_this_seed_phrase_from">12개 또는 24개 단어는 어디서 왔나요?</string>
+    <string name="different_wallets_store_your_kaspa">지갑마다 Kaspa를 보관하는 주소 경로가 다릅니다. KaPay이 자금과 도메인을 찾을 수 있도록 이 단어가 어디서 왔는지 고르세요.</string>
+    <string name="import_words_enter_recovery_phrase">12개 또는 24개 단어 입력</string>
 </resources>

@@ -25,6 +25,10 @@ interface PortfolioDefinitionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(portfolio: PortfolioEntity)
 
+    /** Delete Account: one wallet's portfolios. */
+    @Query("DELETE FROM portfolios WHERE walletAddress = :walletAddress")
+    suspend fun deleteAllForWallet(walletAddress: String)
+
     @Query("DELETE FROM portfolios WHERE id = :id")
     suspend fun delete(id: String)
 
@@ -33,4 +37,8 @@ interface PortfolioDefinitionDao {
 
     @Query("SELECT * FROM portfolios WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): PortfolioEntity?
+
+    /** Every portfolio id another wallet on this device holds - the Nextcloud merge never moves those. */
+    @Query("SELECT id FROM portfolios WHERE walletAddress != :walletAddress AND walletAddress != ''")
+    suspend fun idsOfOtherWallets(walletAddress: String): List<String>
 }

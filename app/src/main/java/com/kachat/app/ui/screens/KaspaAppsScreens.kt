@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import android.annotation.SuppressLint
 import android.view.ViewGroup
 import android.webkit.WebView
@@ -46,7 +47,6 @@ import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.border
-import com.kachat.app.ui.hubTitle
 import com.kachat.app.ui.theme.iosShadow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -76,144 +76,9 @@ import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
 
 /**
- * One bubble in the Kaspa Websites grid - curated Kaspa sites opened in the in-app browser.
- * [name] is iOS's display name ("Kaspa Stream", not the domain); [icon] its SF Symbol's closest
- * Material glyph, unless [usesKaspaLogo] draws the Kaspa mark instead.
- */
-data class KaspaApp(
-    val name: String,
-    val url: String,
-    val icon: ImageVector = Icons.Outlined.Language,
-    val usesKaspaLogo: Boolean = false,
-)
-
-/** Same curated list, names, icons and order as iOS's ProfileAppsView. */
-val KASPA_APPS = listOf(
-    KaspaApp("Kaspa.org", "https://kaspa.org", usesKaspaLogo = true),
-    KaspaApp("Kaspa Stream", "https://kaspa.stream", Icons.Outlined.MonitorHeart),          // waveform.path.ecg
-    KaspaApp("Kaspa Explorer", "https://explorer.kaspa.org", Icons.Outlined.Search),        // magnifyingglass
-    KaspaApp("KasMap", "https://kasmap.org", Icons.Outlined.Map),                           // map
-    KaspaApp("KasShi", "https://kasshi.io", Icons.Filled.SmartDisplay),                     // play.rectangle.fill
-    KaspaApp("Kaspa News", "https://kaspa.news", Icons.Outlined.Newspaper),                 // newspaper
-    KaspaApp("KasPlay", "https://kasplay.fun", Icons.Outlined.SportsEsports),               // gamecontroller
-    KaspaApp("KasMart", "https://kasmart.org", Icons.Outlined.ShoppingCart),                // cart
-    KaspaApp("KasMedia", "https://kasmedia.com", Icons.Outlined.Article),                   // doc.text.image
-    KaspaApp("Kaspalytics", "https://www.kaspalytics.com", Icons.Outlined.Leaderboard),     // chart.bar
-    KaspaApp("Kas-Smiths", "https://kas-smiths.org", Icons.Outlined.Hardware),              // hammer
-    KaspaApp("Kaspa Core R&D", "https://t.me/kasparnd", Icons.Outlined.Science),            // atom
-    // Free testnet-10 KAS for the app's testnet mode (Settings > Connection > Testnet uses TN10).
-    KaspaApp("TN10 Faucet", "https://faucet-tn10.kaspanet.io", Icons.Filled.WaterDrop),     // drop.fill
-)
-
-/** The Kaspa Websites page - Kaspa Hub's tile and Profile > Apps open it (iOS ProfileAppsView). */
-@androidx.compose.material3.ExperimentalMaterial3Api
-@Composable
-fun KaspaAppsScreen(onBack: () -> Unit, onOpen: (KaspaApp) -> Unit) {
-    val colors = LocalAppColors.current
-    androidx.compose.material3.Scaffold(
-        containerColor = colors.background,
-        // Runs on under the dock, as iOS's content runs on under its tab bar.
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
-        topBar = {
-            // iOS: `.navigationTitle(AppTab.apps.ecosystemTitle)`, a large title and nothing under it.
-            MainPageHeader(title = com.kachat.app.ui.Screen.KaspaWebsites.hubTitle, onBack = onBack)
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp)
-                .padding(bottom = LocalDockInset.current),
-        ) {
-            KaspaAppsGrid(onOpen = onOpen)
-        }
-    }
-}
-
-/**
- * The bubble grid, laid out as iOS's `LazyVGrid(columns: [GridItem(.adaptive(minimum: 96),
- * spacing: 20)], spacing: 24)`: as many 96-wide columns as fit 20 apart (three on a phone), the
- * rows 24 apart, each bubble centred in its column.
- */
-@Composable
-fun KaspaAppsGrid(onOpen: (KaspaApp) -> Unit) {
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val perRow = maxOf(1, ((maxWidth + 20.dp) / (96.dp + 20.dp)).toInt())
-        Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-            KASPA_APPS.chunked(perRow).forEach { rowApps ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
-                ) {
-                    rowApps.forEach { app ->
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                            KaspaAppBubble(app, onClick = { onOpen(app) })
-                        }
-                    }
-                    // A short last row keeps its columns where the full rows have them.
-                    repeat(perRow - rowApps.size) { Spacer(Modifier.weight(1f)) }
-                }
-            }
-        }
-    }
-}
-
-/**
- * One site: iOS's 68pt `.regularMaterial` circle with a 0.8 white hairline at 18% and a soft
- * shadow (black at 12%, radius 8, 4 down), the 28pt semibold symbol in the accent colour (the
- * Kaspa mark 34 square), and the name 8 below in caption semibold on one line.
- */
-@Composable
-private fun KaspaAppBubble(app: KaspaApp, onClick: () -> Unit) {
-    val colors = LocalAppColors.current
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        // The column's full width, so the name gets the whole grid column as on iOS (it was held
-        // to the 68 bubble and cut "Kaspa Explorer" short).
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(68.dp)
-                .iosShadow(34.dp, Color.Black.copy(alpha = 0.12f), 8.dp, 4.dp)
-                .clip(CircleShape)
-                .background(colors.surface)
-                .border(0.8.dp, Color.White.copy(alpha = 0.18f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (app.usesKaspaLogo) {
-                androidx.compose.foundation.Image(
-                    painter = painterResource(R.drawable.ic_kaspa_logo),
-                    contentDescription = null,
-                    modifier = Modifier.size(34.dp),
-                )
-            } else {
-                // A Material glyph is inset in its box; 32 draws it the size of a 28pt symbol.
-                Icon(app.icon, null, tint = KaspaTeal, modifier = Modifier.size(32.dp))
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            app.name,
-            color = colors.textPrimary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            softWrap = false,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/**
- * Full-screen in-app browser for the Apps bubbles - the only way out is the X top-left,
- * matching iOS's InAppBrowserScreen. Plain WebView with JS enabled; navigation stays inside.
+ * Full-screen in-app browser - Claim Testnet Kaspa's faucet and a .kachat profile's link open
+ * in it; the only way out is the X top-left, matching iOS's InAppBrowserScreen. Plain WebView
+ * with JS enabled; navigation stays inside.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -231,7 +96,7 @@ fun InAppBrowserScreen(url: String, title: String, notice: String? = null, onClo
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onClose) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = KaspaTeal)
+                Icon(Icons.Default.Close, contentDescription = tr(R.string.kp_close_bbfa7), tint = KaspaTeal)
             }
             Text(title, color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }

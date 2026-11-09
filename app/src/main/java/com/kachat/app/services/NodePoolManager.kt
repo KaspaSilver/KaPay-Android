@@ -24,7 +24,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -52,13 +51,11 @@ import javax.inject.Singleton
 class NodePoolManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settings: AppSettingsRepository,
-    // For the probe-loop background gate only (same rule as ChatRepository's 2s sync loop):
-    // while the app is backgrounded AND native FCM push is active, probing pauses instead of
-    // dialing nodes every 5-30s for the whole life of a battery-exempted background process.
-    // Both are dependency-cycle-safe here: NotificationHelper needs only Context + settings,
-    // and PushState is deliberately dependency-free.
+    // For the probe-loop background gate only: while the app is backgrounded (whatever the push
+    // state) probing pauses and the pooled connections close, so no node is dialed or pinged
+    // until the app comes back - see parkWhileBackgrounded(). Dependency-cycle-safe here:
+    // NotificationHelper needs only Context + settings.
     private val notificationHelper: NotificationHelper,
-    private val pushState: PushState,
     // Metered-network (cellular) gate for discovery-mode probing — see probeCycle() and
     // startProbing(): a healthy pool probes only its primary node at a slower cadence, and
     // the other pooled connections are closed between cycles so their HTTP/2 keepalive pings
@@ -171,10 +168,11 @@ class NodePoolManager @Inject constructor(
     // Per-hostname bound for resolveDnsSeedsIfNeeded()'s parallel lookups.
     private val dnsLookupTimeoutMillis = 5_000L
 
-    // Per-candidate RPC timeout while racing discovery probes in parallel — tight (vs the 5s
-    // RPC default the pinned trusted node keeps) because the first responder is published
-    // immediately (see probeCycle) and a dead candidate should not hold a cycle open long.
-    private val discoveryProbeTimeoutMillis = 3_000L
+    // Per-candidate RPC timeout while racing discovery probes in parallel. The first call on a
+    // new channel carries its TCP, TLS and HTTP/2 setup, which must fit on a slow cellular link
+    // (iOS 2da5f4b's 5 s connect timeout); the first responder is still published immediately
+    // (see probeCycle), so a dead candidate only holds up the verdict on the cycle as a whole.
+    private val discoveryProbeTimeoutMillis = 5_000L
 
     // Consecutive completed automatic-mode cycles in which not a single probed node was
     // reachable — drives both the exponential probe backoff in startProbing() (a fully
@@ -203,6 +201,11 @@ class NodePoolManager @Inject constructor(
     private var lastNetworkHandle: Long? = null
     @Volatile
     private var lastNetworkResetAt = 0L
+
+    // Bumped on each reset of onNetworkPathChanged(), once the old path's connections are gone:
+    // OwnAddressSubscription re-subscribes on it at once (iOS 2da5f4b `handleEpochChange`).
+    private val _networkPathChanges = MutableStateFlow(0L)
+    val networkPathChanges: StateFlow<Long> = _networkPathChanges.asStateFlow()
 
     private var probeJob: Job? = null
 
@@ -364,26 +367,24 @@ class NodePoolManager @Inject constructor(
         consecutiveDeadCycles = 0
         _nodeConnectionsBlocked.value = false
         publish()
-        refreshNow()
+        _networkPathChanges.value++
+        // A backgrounded app dials nothing (see parkWhileBackgrounded); the probe cycle that
+        // runs on the next foreground covers the new network.
+        if (notificationHelper.isAppInForeground) refreshNow()
     }
 
     private fun startProbing() {
         probeJob?.cancel()
         probeJob = scope.launch {
             while (true) {
-                // Background gate, mirroring ChatRepository's poll-loop gate: while the app is
-                // BACKGROUNDED and native FCM push is active, stop dialing nodes entirely
-                // (suspend on the combined flow — no keepalive traffic at all) and resume
-                // instantly on foreground or the moment push stops being reliable. On resume a
-                // probe cycle runs immediately, and the on-foreground
-                // reconnectStaleConnections() call in KaChatApplication independently revives
-                // any connections the OS quietly killed during the pause. Without FCM
-                // (pushActive can never turn true) this gate never engages, so the loop
-                // behaves exactly as before.
-                if (!notificationHelper.isAppInForeground && pushState.isActive) {
-                    combine(notificationHelper.appForegroundFlow, pushState.pushActive) { foreground, pushActive ->
-                        foreground || !pushActive
-                    }.first { it }
+                // Background gate: while the app is backgrounded, whatever the push state, stop
+                // probing and close the pooled connections (their streams are what keepalive
+                // pings ride on), then resume on foreground with an immediate probe cycle. The
+                // push service and SyncWorker cover a closed app; SyncWorker's balance reads
+                // still open a connection on demand (connectionFor), which the park loop closes
+                // again once it is idle.
+                if (!notificationHelper.isAppInForeground) {
+                    parkWhileBackgrounded()
                 }
                 val anyReachable = probeCycle()
                 if (anyReachable) consecutiveDeadCycles = 0 else consecutiveDeadCycles++
@@ -421,7 +422,35 @@ class NodePoolManager @Inject constructor(
                         else -> 30_000L
                     }
                 }
-                delay(delayMillis)
+                // Wait out the cadence, but stop waiting the moment the app goes to the
+                // background so the gate above parks the loop and closes connections right away.
+                withTimeoutOrNull(delayMillis) { notificationHelper.appForegroundFlow.first { !it } }
+            }
+        }
+    }
+
+    /**
+     * Holds the probe loop while the app is backgrounded. After 15 s (a send or balance read
+     * already under way gets to finish) it closes every pooled connection with no call in
+     * flight, which ends its message stream and so its HTTP/2 keepalive pings, and looks again
+     * every 60 s for any connection opened in the background since (SyncWorker, a push).
+     * Returns when the app is foregrounded; the probe cycle that follows dials fresh connections.
+     */
+    private suspend fun parkWhileBackgrounded() {
+        val foreground = notificationHelper.appForegroundFlow
+        var wait = 15_000L
+        while (true) {
+            if (withTimeoutOrNull(wait) { foreground.first { it } } != null) return
+            closeIdleConnections()
+            wait = 60_000L
+        }
+    }
+
+    /** Closes and forgets every pooled connection with no call in flight. */
+    private fun closeIdleConnections() {
+        for ((address, connection) in connections) {
+            if (connection.pendingCount == 0 && connections.remove(address, connection)) {
+                runCatching { connection.close() }
             }
         }
     }
@@ -717,11 +746,17 @@ class NodePoolManager @Inject constructor(
      */
     fun getBroadcastConnection(): KaspadConnection {
         trustedNodeAddress.value?.let { return connectionFor(it) }
-        val bestActive = registry.snapshot()
+        val active = registry.snapshot()
             .filter { registry.statusOf(it) == "Active" }
-            .minByOrNull { it.lastProbe?.latencyMs ?: Long.MAX_VALUE }
+            .sortedBy { it.lastProbe?.latencyMs ?: Long.MAX_VALUE }
+        val bestActive = active.firstOrNull()
         if (bestActive != null) {
             connections[bestActive.address]?.let { return it }
+            // Its connection was just dropped ([refreshBroadcastConnection]'s reconnect retry, a
+            // dead stream): the next probed healthy node, connected or dialed, before ever an
+            // unprobed DNS or seed address - then the best one dialed fresh.
+            for (next in active.drop(1)) connections[next.address]?.let { return it }
+            return connectionFor(active.getOrNull(1)?.address ?: bestActive.address)
         }
         val fallbackAddress = dnsResolvedEndpoints.firstOrNull() ?: seeds.first()
         return connectionFor(fallbackAddress)
@@ -776,44 +811,128 @@ class NodePoolManager @Inject constructor(
         }
     }
 
+    /** What each of [addresses] holds as the node sees it (an address with nothing is left out), or
+     *  null when the node cannot answer. For an import's passphrase step (iOS 4f5dfd2
+     *  `findChattingAddresses`), where there's no account yet. */
+    suspend fun getBalancesByAddresses(addresses: List<String>): Map<String, Long>? {
+        return try {
+            val out = HashMap<String, Long>()
+            for (entry in getBroadcastConnection().getUtxosByAddresses(addresses)) {
+                out[entry.address] = (out[entry.address] ?: 0L) + entry.utxoEntry.amount.toLong()
+            }
+            out
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            Log.w("NodePoolManager", "Node balances timed out: ${e.message}")
+            null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("NodePoolManager", "Node balances failed: ${e.message}")
+            null
+        }
+    }
+
     /**
      * Submits through [submit] and, if it throws, checks whether the network has [txId] anyway
      * before passing the error on - see [SubmitConfirmation] (iOS ad29da9, audit IOS-014). The id
      * is [transaction]'s, computed locally ([com.kachat.app.util.KaspaTransactionId]); should that
      * ever fail, the submit runs exactly as before, unchecked. [rest] is the REST API for the
-     * acceptance lookup, null to ask the nodes only.
+     * acceptance lookup, null to ask the nodes only. A lost answer can end in
+     * [SendOutcomeUnknownException], and a node's answer only counts if it carries that id (iOS
+     * 953b255).
      */
     suspend fun submitConfirmingKnown(transaction: RawTransaction, rest: KaspaRestApi?, submit: suspend () -> String): String {
         val txId = runCatching { com.kachat.app.util.KaspaTransactionId.compute(transaction) }.getOrDefault("")
-        return submitConfirmingKnown(txId, rest, submit)
+        val inputs = transaction.inputs.map { KaspaWalletEngine.outpointKey(it.previousOutpoint) }
+        return holdingInputs(inputs) { submitConfirmingKnownUnheld(txId, rest, submit) }
     }
 
     /**
      * [submitConfirmingKnown] for a transaction whose id the caller already computed
      * ([expectedTxId]): the version-1 `.kachat` builders, whose transactions aren't
      * [RawTransaction]s (iOS 9139e88 `submitRpcTransaction(_:expectedTxId:)`, audit IOS-014).
+     * [inputOutpoints] ("txid:index") are held back as in the other overload.
      */
-    suspend fun submitConfirmingKnown(expectedTxId: String, rest: KaspaRestApi?, submit: suspend () -> String): String {
+    suspend fun submitConfirmingKnown(
+        expectedTxId: String,
+        rest: KaspaRestApi?,
+        inputOutpoints: List<String>,
+        submit: suspend () -> String,
+    ): String = holdingInputs(inputOutpoints) { submitConfirmingKnownUnheld(expectedTxId, rest, submit) }
+
+    /**
+     * Every coin a submit spends stays out of the next send, Max and fee for two minutes
+     * ([submittedInputs]). Here, at the submit, so no send path (.kas and .kachat names, combines,
+     * Cold Storage) can skip it (iOS 1652437 `NodePoolService.submitTransaction`). A rejection
+     * holds nothing: nothing was sent. Nor does an unknown outcome (iOS 2da5f4b): a resend then
+     * picks the same coins, so at most one of the two can land, where different coins would let
+     * both.
+     */
+    private suspend fun holdingInputs(inputs: List<String>, submit: suspend () -> String): String {
+        val txId = submit()
+        submittedInputs.reserve(inputs)
+        return txId
+    }
+
+    /** Coins a submit through [submitConfirmingKnown] spent: see [holdingInputs]. */
+    internal val submittedInputs = SubmittedOutpointHold()
+
+    private suspend fun submitConfirmingKnownUnheld(expectedTxId: String, rest: KaspaRestApi?, submit: suspend () -> String): String {
         val txId = expectedTxId.lowercase()
         return SubmitConfirmation.submitOrConfirmKnown(
             txId = txId,
             isKnown = { isTransactionKnown(it, rest) },
+            // After a node's rejection, a REST server typed into Settings isn't enough to call it
+            // sent: only a mempool, or the built-in REST server (iOS 1652437 `afterRejection`).
+            isKnownAfterRejection = { isTransactionKnown(it, rest, builtInRestOnly = true) },
             onRecovered = { e ->
                 Log.w("NodePoolManager", "Submit of ${txId.take(12)} reported \"${e.message}\" but the network has it: treated as sent")
             },
+            onForeignAnswer = { Log.w("NodePoolManager", "A node answered a submit with a different id than ${txId.take(12)}") },
+            onAnswered = { resendIfNetworkCantSee(txId, rest, submit) },
+            // A transaction pool or acceptance only: an orphan-pool hold lands only if its parent
+            // does, so it is never "sent" - after a rejection it is an unknown outcome instead.
+            lookup = { id -> isInAnyMempool(id, includeOrphanPool = false) || (rest != null && isAcceptedViaRest(rest, id)) },
+            heldAsOrphan = { id -> isInAnyMempool(id, includeOrphanPool = true) },
             submit = submit,
         )
+    }
+
+    /**
+     * In the background, a transaction the network can't see a moment after a node took it goes out
+     * again, in case that node kept it to itself (iOS 953b255 `checkedSubmit`). [submit] carries the
+     * same signed transaction, with the same id, so sending it again can't pay twice.
+     */
+    private fun resendIfNetworkCantSee(txId: String, rest: KaspaRestApi?, submit: suspend () -> String) {
+        scope.launch {
+            repeat(SubmitConfirmation.RESEND_CHECKS) {
+                delay(SubmitConfirmation.RESEND_DELAY_MS)
+                if (isTransactionKnown(txId, rest)) return@launch
+                Log.w("NodePoolManager", "The network can't see ${txId.take(12)} yet: sending it again")
+                try {
+                    submit()
+                } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                    Log.w("NodePoolManager", "Sending ${txId.take(12)} again timed out")
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w("NodePoolManager", "Sending ${txId.take(12)} again: ${e.message}")
+                }
+            }
+        }
     }
 
     /**
      * Submits [transaction] through the broadcast connection. An "orphan where orphan is
      * disallowed" rejection waits for the parent and tries again, then lets the node hold it as an
      * orphan - see [SubmitConfirmation.submitWaitingForParent] (iOS 4eb492f, which does this in
-     * NodePoolService.submitTransaction for messages, payments and reactions alike).
+     * NodePoolService.submitTransaction for messages, payments and reactions alike). [escalateOrphan]
+     * false stops short of that hold, for a send that moves money (iOS 2da5f4b).
      */
-    suspend fun submitWaitingForParent(transaction: RawTransaction, allowOrphan: Boolean = false): String =
+    suspend fun submitWaitingForParent(transaction: RawTransaction, allowOrphan: Boolean = false, escalateOrphan: Boolean = true): String =
         SubmitConfirmation.submitWaitingForParent(
             allowOrphan = allowOrphan,
+            escalateOrphan = escalateOrphan,
             onHeldAsOrphan = { id ->
                 Log.i("NodePoolManager", "${id.take(12)} submitted as an orphan: its parent hadn't reached that node yet")
             },
@@ -883,30 +1002,49 @@ class NodePoolManager @Inject constructor(
     }
 
     /** Whether the network already has [txId]: in a mempool (up to three nodes), or accepted
-     *  (REST API) - asked twice, 1.5 s apart (iOS NodePoolService.isTransactionKnown). */
-    suspend fun isTransactionKnown(txId: String, rest: KaspaRestApi?): Boolean =
+     *  (REST API) - asked twice, 1.5 s apart (iOS NodePoolService.isTransactionKnown). A node's
+     *  orphan pool doesn't count: a transaction held there lands only if its parent does, so the
+     *  resend check sends it again, and a submit error isn't turned into "sent" by it. */
+    suspend fun isTransactionKnown(txId: String, rest: KaspaRestApi?, builtInRestOnly: Boolean = false): Boolean =
         SubmitConfirmation.isKnown(
             txId = txId,
-            inMempool = { isInAnyMempool(it) },
-            acceptedViaRest = { id -> rest != null && isAcceptedViaRest(rest, id) },
+            inMempool = { isInAnyMempool(it, includeOrphanPool = false) },
+            acceptedViaRest = { id -> rest != null && (!builtInRestOnly || isBuiltInRestServer()) && isAcceptedViaRest(rest, id) },
         )
+
+    /** Whether the REST server in use is the built-in one for the network the app runs on, not one
+     *  typed into Settings (iOS 1652437 `isAcceptedViaREST(builtInServerOnly:)`). */
+    private suspend fun isBuiltInRestServer(): Boolean {
+        val inUse = try {
+            settings.kaspaRestUrl.first()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return false
+        }
+        return SubmitConfirmation.isSameRestServer(inUse, AppSettingsRepository.defaultKaspaRestUrl(com.kachat.app.util.KaspaNetwork.launch))
+    }
 
     /** Whether a node still holds [txId] in its mempool ([isInAnyMempool]): a `.kachat` commit
      *  that isn't on chain yet is waiting there, or was dropped (iOS b219bb0 `getMempoolEntry`). */
     suspend fun isInMempool(txId: String): Boolean = isInAnyMempool(txId)
 
     /** Whether any of up to three nodes (the trusted node alone, when one is set) holds [txId]
-     *  in its mempool, orphan pool included. Asked in parallel, 2 s each. */
-    private suspend fun isInAnyMempool(txId: String): Boolean {
+     *  in its mempool, the orphan pool too when [includeOrphanPool]. Asked in parallel, 2 s each.
+     *  The broadcast node is always among them: after a submit it's the node most likely to hold
+     *  the transaction (iOS 1652437, "the primary too"), even when the reconnect retry moved it
+     *  past the three fastest. */
+    private suspend fun isInAnyMempool(txId: String, includeOrphanPool: Boolean = true): Boolean {
         val connections = trustedNodeAddress.value?.let { listOf(connectionFor(it)) }
-            ?: registry.snapshot()
-                .filter { registry.statusOf(it) == "Active" }
-                .sortedBy { it.lastProbe?.latencyMs ?: Long.MAX_VALUE }
-                .take(3)
-                .map { connectionFor(it.address) }
-                .ifEmpty { listOf(getBroadcastConnection()) }
+            ?: (
+                listOf(getBroadcastConnection()) + registry.snapshot()
+                    .filter { registry.statusOf(it) == "Active" }
+                    .sortedBy { it.lastProbe?.latencyMs ?: Long.MAX_VALUE }
+                    .take(3)
+                    .map { connectionFor(it.address) }
+                ).distinct()
         return coroutineScope {
-            connections.map { connection -> async { connection.hasMempoolEntry(txId) } }.awaitAll().any { it }
+            connections.map { connection -> async { connection.hasMempoolEntry(txId, includeOrphanPool = includeOrphanPool) } }.awaitAll().any { it }
         }
     }
 
@@ -923,7 +1061,8 @@ class NodePoolManager @Inject constructor(
      * fresh. A silently-died gRPC stream is otherwise only reaped by the 30s probe cycle — any
      * submit in that window queued onto the dead stream and ate the full 15s timeout, failing
      * the message while the app still looked "connected" (in trusted-node mode the health
-     * readout is pinned Active). The send path uses this for its one-shot reconnect retry.
+     * readout is pinned Active). The send path uses this for its one-shot reconnect retry, which
+     * then goes to the next probed Active node ([getBroadcastConnection]), not an unprobed seed.
      */
     fun refreshBroadcastConnection() {
         val address = trustedNodeAddress.value

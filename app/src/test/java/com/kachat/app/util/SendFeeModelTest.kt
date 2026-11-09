@@ -104,6 +104,23 @@ class SendFeeModelTest {
     }
 
     @Test
+    fun `Max from an address whose change goes to a P2SH slot sends the full Max, the leftover shown as fee`() {
+        // A primary's change goes to a fresh quantum slot: a 35-byte script, a byte longer than
+        // the one Max is priced with. That byte used to come off the recipient's amount unseen.
+        val max = SendFeeModel.maxAfterFees(twentyCoins.sumOf { it.utxoEntry.amount }, 20, rate)
+        val paid = KaspaUtxoSelector.selectUtxosAndCalculateFee(
+            twentyCoins, max, rate, null, recipientScriptLen = 34, changeScriptLen = SendFeeModel.P2SH_SCRIPT_LEN
+        )
+        assertEquals(max, paid.finalAmount)
+        assertTrue(paid.totalSelected >= paid.requiredAmount)
+        assertTrue(!paid.changeOutputPriced)
+        assertEquals(100 * kas - max, paid.estimatedFee + paid.foldedChangeSompi)
+        // the Review's preview shows that same fee
+        val preview = SendFeeModel.previewAutomaticSelection(twentyCoins, max, rate, changeScriptLen = SendFeeModel.P2SH_SCRIPT_LEN)!!
+        assertEquals(100 * kas - max, preview.totalFeeSompi + preview.foldedChangeSompi)
+    }
+
+    @Test
     fun `Max subtracts a custom extra flat`() {
         val base = SendFeeModel.baseFee(3, rate)
         assertEquals(10 * kas - base - 5_000_000L, SendFeeModel.maxAfterFees(10 * kas, 3, rate, feeMultiplier = 5, customExtraFeeSompi = 5_000_000L))

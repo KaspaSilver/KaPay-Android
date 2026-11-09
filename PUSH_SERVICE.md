@@ -1,6 +1,6 @@
-# Push: what KaChat Wallet for Android needs
+# Push: what KaPay for Android needs
 
-KaChat Wallet uses KaChat's push service (`kachat-indexer/kasia-indexer`, `indexer/src/push.rs`,
+KaPay uses KaChat's push service (`kachat-indexer/kasia-indexer`, `indexer/src/push.rs`,
 default `https://indexer.kachat.app`, formerly `kachat.duckdns.org`), the same one the iPhone wallet uses - see the iPhone
 wallet's `PUSH_SERVICE.md` for the service side. It asks for only two kinds of push:
 

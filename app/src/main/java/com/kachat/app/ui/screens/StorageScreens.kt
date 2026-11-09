@@ -73,9 +73,9 @@ import com.kachat.app.ui.theme.LocalAppColors
 /**
  * Settings > Storage > Nextcloud — the Address Book and Portfolio backup to the user's own
  * Nextcloud, iOS wallet's NextcloudSettingsView: an inset-grouped Form page ([SettingsFormPage])
- * whose sections (connect form, or the account, Automatic Backup, Back Up Now, Restore Backup and
- * disconnect) are [NextcloudSettingsSection]'s. No chat restore modal here: the wallet's backup
- * holds no chats (iOS wallet 301ebfb), and its restore reports in place.
+ * whose sections (connect form, or the account, Contact Backup, Portfolio Backup and disconnect) are
+ * [NextcloudSettingsSection]'s. No restore: a manual backup merges the server's copy in first, and a
+ * fresh connection merges both in once (iOS 953b255).
  */
 @Composable
 fun NextcloudStorageScreen(onBack: () -> Unit) {

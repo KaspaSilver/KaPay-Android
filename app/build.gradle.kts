@@ -82,20 +82,20 @@ android {
         minSdk = 26
         targetSdk = 36
         // ---- Version ----
-        // KaChat Wallet numbers its own builds from 1.0 (1), like the iPhone wallet.
+        // KaPay's version and build number match the iPhone wallet's (now 5.2.3 build 2).
         //
         // KACHAT_BUILD_NUMBER is the number people see: the About row and the crash and
-        // diagnostics reports read "1.0 (1)", "1.0 (2)", ... on a handed-out GitHub build, and
-        // plain "1.0" on the Play build (see KACHAT_IS_RELEASE per flavour below). Bump it for
+        // diagnostics reports read "5.2.3 (2)" on a handed-out GitHub build, and
+        // plain "5.2.3" on the Play build (see KACHAT_IS_RELEASE per flavour below). Bump it for
         // every build that is handed out.
         //
         // versionCode is a separate thing and only ever goes up: Play's high-water mark is
         // permanent and per app, and unlike iOS it does NOT reset when versionName changes. A
         // device will not treat a rebuild as an update unless it moves, so it goes up with every
         // handed-out build too, alongside the build number.
-        val kachatBuildNumber = 7
-        versionCode = 7
-        versionName = "1.0"
+        val kachatBuildNumber = 4
+        versionCode = 11
+        versionName = "5.2.3"
         buildConfigField("int", "KACHAT_BUILD_NUMBER", kachatBuildNumber.toString())
         // KACHAT_IS_RELEASE is set per flavour below rather than once here, because on Android the
         // two channels ARE the two answers iOS's single flag flips between: what goes to the Play

@@ -54,6 +54,8 @@ fun AddressResolutionCard(
     address: String?,
     domain: String? = null,
     modifier: Modifier = Modifier,
+    /** Only the address counts here (a signature proves it, and says nothing of any name; iOS 2da5f4b). */
+    addressOnly: Boolean = false,
     viewModel: AddressResolutionViewModel = hiltViewModel(),
 ) {
     val colors = LocalAppColors.current
@@ -107,17 +109,19 @@ fun AddressResolutionCard(
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ContactAvatar(imageUrl = avatarUrl, fallbackText = name ?: shown.takeLast(8), size = 44.dp)
+        ContactAvatar(imageUrl = avatarUrl, fallbackText = name ?: shown.takeLast(8), size = 44.dp, address = shown)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                name ?: if (looking) stringResource(R.string.looking_up) else stringResource(R.string.no_domain),
-                color = if (name != null) colors.textPrimary else colors.textSecondary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (!addressOnly) {
+                Text(
+                    name ?: if (looking) stringResource(R.string.looking_up) else stringResource(R.string.no_domain),
+                    color = if (name != null) colors.textPrimary else colors.textSecondary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             MiddleEllipsisText(
                 shown,
                 color = colors.textSecondary,

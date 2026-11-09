@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -94,7 +95,7 @@ fun CacheSettingsScreen(
 
     Scaffold(
         containerColor = colors.background,
-        topBar = { SettingsSubpageBar(title = "Cache", onBack = onBack) }
+        topBar = { SettingsSubpageBar(title = tr(R.string.kp_cache_50338), onBack = onBack) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -107,11 +108,8 @@ fun CacheSettingsScreen(
             // SettingsFormSection.
             Spacer(Modifier.height(4.dp))
 
-            // Total, on one row, with the footer under its section (iOS CacheSettingsPage).
-            SettingsFormSection(
-                title = null,
-                footer = "Everything here is downloaded or generated again when it is needed, so clearing it costs a little data and nothing else.",
-            ) {
+            // Total, on one row (iOS CacheSettingsPage).
+            SettingsFormSection(title = null) {
                 Row(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -131,7 +129,7 @@ fun CacheSettingsScreen(
                 }
             }
 
-            SettingsFormSection(title = "What's Cached") {
+            SettingsFormSection(title = tr(R.string.kp_what_s_cached_e73da)) {
                 CacheManager.Category.entries.forEachIndexed { index, category ->
                     if (index > 0) SettingsDivider(54.dp)
                     val bytes = sizes[category] ?: 0L
@@ -165,7 +163,7 @@ fun CacheSettingsScreen(
             // Clear All Cache: red text, no icon; dimmed while there is nothing to clear (iOS).
             SettingsFormSection(title = null) {
                 Text(
-                    "Clear All Cache",
+                    tr(R.string.kp_clear_all_cache_9a05d),
                     color = colors.danger,
                     fontSize = 17.sp,
                     modifier = Modifier
@@ -195,7 +193,7 @@ fun CacheSettingsScreen(
     if (showClearAll) {
         ConfirmActionSheet(
             title = "Clear All Cache?",
-            confirmTitle = "Clear All",
+            confirmTitle = tr(R.string.kp_clear_all_3a88a),
             confirmSubtitle = "Frees ${CacheManager.formatted(total)}. Your contacts and keys are not touched.",
             confirmIcon = Icons.Outlined.Delete,
             onConfirm = { scope.launch { cacheManager.clearAll(); refresh() } },

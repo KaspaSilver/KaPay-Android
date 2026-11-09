@@ -7,6 +7,7 @@ import android.os.Process
 import androidx.core.content.FileProvider
 import com.google.gson.GsonBuilder
 import com.kachat.app.repository.AppSettingsRepository
+import com.kachat.app.util.redactingAddressesForLog
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import java.io.File
@@ -185,7 +186,8 @@ class DiagnosticsExportService @Inject constructor(
             val output = process.inputStream.bufferedReader().use { it.readText() }
             process.waitFor()
             val lines = output.lines()
-            if (lines.size > maxLines) lines.takeLast(maxLines).joinToString("\n") else output
+            (if (lines.size > maxLines) lines.takeLast(maxLines).joinToString("\n") else output)
+                .redactingAddressesForLog()
         } catch (e: Exception) {
             "Failed to collect crash buffer: ${e.message}"
         }
@@ -199,7 +201,10 @@ class DiagnosticsExportService @Inject constructor(
             val output = process.inputStream.bufferedReader().use { it.readText() }
             process.waitFor()
             val lines = output.lines()
-            if (lines.size > maxLines) lines.takeLast(maxLines).joinToString("\n") else output
+            // Every address in a line, whoever logged it (an exception's message, a library's line),
+            // leaves cut to its last 8 characters, as iOS's AppLog writes them (1652437).
+            (if (lines.size > maxLines) lines.takeLast(maxLines).joinToString("\n") else output)
+                .redactingAddressesForLog()
         } catch (e: Exception) {
             "Failed to collect logs: ${e.message}"
         }

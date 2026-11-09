@@ -1,4 +1,4 @@
-"""Draws the KaChat Wallet logo and app icons: a teal wallet with KaChat's backward K in the middle.
+"""Draws the KaPay logo and app icons: a teal wallet with KaChat's backward K in the middle.
 
 The same artwork as the iPhone wallet's tools/make_logo.py, with Android's adaptive-icon layers
 added (`foreground`, `monochrome`).

@@ -60,3 +60,47 @@ internal class PendingSpentOutpoints(
         private fun outpointKey(outpoint: Outpoint) = KaspaWalletEngine.outpointKey(outpoint)
     }
 }
+
+/**
+ * Every coin a node-pool submit spent ([NodePoolManager.submitConfirmingKnown]), held back from the
+ * next send, Max and fee for [ttlMs] - on success, and on an unknown outcome, which may yet land
+ * (iOS 1652437 `NodePoolService.submitTransaction` -> `WalletService.reserveOutpoints`). Recorded
+ * at the submit rather than at each caller, so no send path (.kas and .kachat names, combines, Cold
+ * Storage) can skip it. Keyed by outpoint ("txid:index", lowercased) alone: an outpoint names one
+ * coin whatever address holds it. Read by [KaspaWalletEngine]'s reconcile, the KNS inscription's
+ * funding and the .kachat names' funding.
+ */
+internal class SubmittedOutpointHold(
+    private val ttlMs: Long = PendingSpentOutpoints.TTL_MS,
+    private val now: () -> Long = System::currentTimeMillis,
+) {
+    private val heldAt = HashMap<String, Long>()
+
+    /** Holds [keys] ("txid:index") from now. */
+    @Synchronized
+    fun reserve(keys: Collection<String>) {
+        if (keys.isEmpty()) return
+        val at = now()
+        keys.forEach { heldAt[it.trim().lowercase()] = at }
+    }
+
+    /** Whether [key] ("txid:index") is held right now. */
+    @Synchronized
+    fun isHeld(key: String): Boolean {
+        prune()
+        return heldAt.containsKey(key.trim().lowercase())
+    }
+
+    /** [items] without the held ones, [key] giving each one's "txid:index". */
+    @Synchronized
+    fun <T> unreserved(items: List<T>, key: (T) -> String): List<T> {
+        prune()
+        if (heldAt.isEmpty()) return items
+        return items.filter { !heldAt.containsKey(key(it).trim().lowercase()) }
+    }
+
+    private fun prune() {
+        val cutoff = now() - ttlMs
+        heldAt.entries.removeAll { it.value < cutoff }
+    }
+}

@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.QuestionMark
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -72,6 +74,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
@@ -88,10 +91,12 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kachat.app.R
+import com.kachat.app.services.SendOutcomeUnknownException
 import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
 import com.kachat.app.util.IosHaptic
 import com.kachat.app.util.KaspaUnit
+import com.kachat.app.util.authenticateWithDeviceCredential
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -114,7 +119,7 @@ import kotlin.math.sin
  * texts that have no translation yet).
  */
 data class SwipeUpLabels(
-    /** The bar (and the title on the sending screen) once the swipe is past halfway. */
+    /** The bar (and the title on the sending screen) once the swipe is past the threshold. */
     @StringRes val release: Int,
     /** The sending screen's title while it goes out. */
     @StringRes val working: Int,
@@ -122,15 +127,12 @@ data class SwipeUpLabels(
     @StringRes val workingDetail: Int,
     /** The title once it went out. */
     @StringRes val done: Int,
-    /** The line under the title while the swipe is still short of halfway. */
-    @StringRes val hint: Int,
     /** The recipient line, with `%1$s`: "to kaspa:..." or "for name.kachat". */
     @StringRes val recipientLine: Int,
     /** Under "Failed" when the screen has no error of its own. */
     @StringRes val failedFallback: Int,
     val releaseOverride: String? = null,
     val doneOverride: String? = null,
-    val hintOverride: String? = null,
     val failedFallbackOverride: String? = null,
 ) {
     companion object {
@@ -139,7 +141,6 @@ data class SwipeUpLabels(
             working = R.string.sending,
             workingDetail = R.string.swipe_sending_detail,
             done = R.string.sent,
-            hint = R.string.swipe_hint_send,
             recipientLine = R.string.swipe_to_recipient,
             failedFallback = R.string.swipe_send_failed_fallback,
         )
@@ -148,7 +149,6 @@ data class SwipeUpLabels(
             working = R.string.swipe_buying,
             workingDetail = R.string.swipe_buying_detail,
             done = R.string.swipe_name_bought,
-            hint = R.string.swipe_hint_buy,
             recipientLine = R.string.swipe_for_recipient,
             failedFallback = R.string.swipe_buy_failed_fallback,
         )
@@ -157,7 +157,6 @@ data class SwipeUpLabels(
             working = R.string.swipe_claiming,
             workingDetail = R.string.swipe_claiming_detail,
             done = R.string.swipe_claim_started,
-            hint = R.string.swipe_hint_claim,
             recipientLine = R.string.swipe_for_recipient,
             failedFallback = R.string.swipe_claim_failed_fallback,
         )
@@ -169,12 +168,10 @@ data class SwipeUpLabels(
             working = R.string.sending,
             workingDetail = R.string.swipe_sending_detail,
             done = R.string.sent,
-            hint = R.string.swipe_hint_send,
             recipientLine = R.string.swipe_for_recipient,
             failedFallback = R.string.swipe_send_failed_fallback,
             releaseOverride = "Release to Confirm",
             doneOverride = done,
-            hintOverride = "Let go past halfway to confirm.",
             failedFallbackOverride = "The transaction didn't go out.",
         )
     }
@@ -185,9 +182,6 @@ private fun SwipeUpLabels.releaseText(): String = releaseOverride ?: stringResou
 
 @Composable
 private fun SwipeUpLabels.doneText(): String = doneOverride ?: stringResource(done)
-
-@Composable
-private fun SwipeUpLabels.hintText(): String = hintOverride ?: stringResource(hint)
 
 @Composable
 private fun SwipeUpLabels.failedFallbackText(): String = failedFallbackOverride ?: stringResource(failedFallback)
@@ -206,8 +200,10 @@ private val SwipeSettleSpring = spring<Float>(dampingRatio = 0.86f, stiffness = 
 private class SwipeUpController(private val scope: CoroutineScope) {
     /** How far the screen has been pushed up, in px. */
     var lift by mutableFloatStateOf(0f)
-    /** Past halfway: letting go sends. */
+    /** Past the threshold: letting go sends. */
     var armed by mutableStateOf(false)
+    /** The device's lock is being asked; the screen stays where it is until it answers. */
+    var authenticating by mutableStateOf(false)
     /** iOS `phase == .sending`: from the swipe until Try Again brings the form back. */
     var sending by mutableStateOf(false)
     /** The DAG gets a moment on screen before the outcome, however fast the send was. */
@@ -225,6 +221,8 @@ private class SwipeUpController(private val scope: CoroutineScope) {
     var thresholdPx = 0f
     var haptic: (IosHaptic) -> Unit = {}
     var action: () -> Unit = {}
+    /** Asks the device's lock, then calls one of the two. */
+    var authenticate: (onSuccess: () -> Unit, onFailure: () -> Unit) -> Unit = { _, onFailure -> onFailure() }
     /** Puts the keyboard away: on the first lift and again as the send starts. */
     var beforeSend: () -> Unit = {}
 
@@ -246,7 +244,7 @@ private class SwipeUpController(private val scope: CoroutineScope) {
     }
 
     fun drag(up: Float) {
-        if (!active || sending) return
+        if (!active || sending || authenticating) return
         if (lift == 0f && up > 0f) {
             // a keyboard left up would sit over the rising screen (iOS 05db583)
             beforeSend()
@@ -261,16 +259,39 @@ private class SwipeUpController(private val scope: CoroutineScope) {
     }
 
     fun dragEnd() {
-        if (sending) return
+        // a touch while the device's lock is up leaves the waiting send as it is (iOS 0799cec)
+        if (sending || authenticating) return
         if (armed && active) {
-            startSending()
+            authenticateThenSend()
         } else {
             armed = false
             settle(0f)
         }
     }
 
-    fun startSending() {
+    /** Kaspa never leaves on the swipe alone: the device's lock first, on every screen that swipes
+     *  up (iOS 953b255 `authenticateThenSend`). Declined, or a phone with no screen lock (which
+     *  says why, [com.kachat.app.util.authenticateWithDeviceCredential]): the screen settles back
+     *  with everything still filled in. */
+    fun authenticateThenSend() {
+        if (authenticating || sending) return
+        authenticating = true
+        authenticate(
+            {
+                authenticating = false
+                startSending()
+            },
+            {
+                authenticating = false
+                armed = false
+                settle(0f)
+            },
+        )
+    }
+
+    private fun startSending() {
+        // one send per swipe, however the lock's answer arrives (iOS 0799cec)
+        if (sending) return
         timers.forEach { it.cancel() }
         timers.clear()
         armed = false
@@ -323,13 +344,16 @@ private class SwipeUpController(private val scope: CoroutineScope) {
 /**
  * A send screen with "Swipe up to Send" pinned at the bottom (iOS 59593af
  * `SwipeUpToSendScrollView`). Press the bar and drag it up: the whole screen moves up with the
- * finger, and the sending screen rises from below in its place. Letting go past halfway sends: the
- * sending screen takes over, a BlockDAG runs across it while the transaction goes out, and then it
- * shows the confirmation ([sent], or [succeeded] with [outcome] for an action that ends without a
- * plain transaction - a .kachat claim, iOS 5bab351). Letting go sooner springs it back. A send that
+ * finger, and the sending screen rises from below in its place. Letting go about a third of the way
+ * up (iOS 953b255) asks the device's lock ([authReason]) and then sends: the sending screen takes
+ * over, a BlockDAG runs across it while the transaction goes out, and then it shows the confirmation
+ * ([sent], or [succeeded] with [outcome] for an action that ends without a plain transaction - a
+ * .kachat claim, iOS 5bab351). Letting go sooner, or declining the lock, springs it back. A send that
  * fails, or never goes busy within 0.6 s of the swipe, shows "Failed" with [failureMessage], and
- * Try Again brings the form back as it was. Only the bar answers - scrolling the form never sends.
- * Accessibility services get a plain click action on the bar.
+ * Try Again brings the form back as it was. A send a node took and never answered
+ * ([com.kachat.app.services.SendOutcomeUnknownException]) shows "Not confirmed" and only Done, since
+ * Try Again could pay twice. Only the bar answers - scrolling the form never sends. Accessibility
+ * services get a plain click action on the bar.
  *
  * It draws its own header ([SendStepHeader]: Cancel and [screenTitle]; with [onBack], a step-by-step
  * send's review, Back and Cancel on the right - iOS 05db583) in place of a top bar, so the header
@@ -363,6 +387,8 @@ fun SwipeUpToSendScreen(
     onSwipe: () -> Unit,
     modifier: Modifier = Modifier,
     labels: SwipeUpLabels = SwipeUpLabels.Send,
+    /** What the device-lock prompt says, when this screen does something other than send Kaspa. */
+    authReason: String? = null,
     /** For an action that ends without a [SentTransaction]: true once it worked. */
     succeeded: Boolean = false,
     /** Shown under the title once it worked, in place of the transaction (a claim's progress). */
@@ -382,6 +408,7 @@ fun SwipeUpToSendScreen(
     val density = LocalDensity.current
     val haptic = com.kachat.app.util.rememberHaptics()
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val c = remember { SwipeUpController(scope) }
     val currentOnSendingChange by rememberUpdatedState(onSendingChange)
@@ -402,11 +429,13 @@ fun SwipeUpToSendScreen(
 
     val done = c.dagShown && (sent != null || succeeded)
     val failure = if (c.failed && c.dagShown) (failureMessage ?: labels.failedFallbackText()) else null
+    // It may have gone through, so there's nothing to try again (iOS 953b255).
+    val outcomeUnknown = failure == SendOutcomeUnknownException.MESSAGE
 
     BackHandler {
         when {
             !c.sending -> (onBack ?: onCancel)()
-            done -> onDone()
+            done || outcomeUnknown -> onDone()
             failure != null -> c.returnToForm()
             // going out: nothing to go back to
         }
@@ -426,7 +455,7 @@ fun SwipeUpToSendScreen(
                     val bar = c.bar
                     if (root == null || bar == null || !root.isAttached || !bar.isAttached) return@awaitEachGesture
                     if (!root.localBoundingBoxOf(bar).contains(down.position)) return@awaitEachGesture
-                    if (!c.active || c.sending) return@awaitEachGesture
+                    if (!c.active || c.sending || c.authenticating) return@awaitEachGesture
                     down.consume()
                     c.dragStart()
                     while (true) {
@@ -441,7 +470,7 @@ fun SwipeUpToSendScreen(
             },
     ) {
         val heightPx = constraints.maxHeight.toFloat()
-        val thresholdPx = max(with(density) { 160.dp.toPx() }, heightPx * 0.5f)
+        val thresholdPx = max(with(density) { 120.dp.toPx() }, heightPx * 0.3f)
         val active = isEnabled && !isBusy
         SideEffect {
             c.active = active
@@ -450,6 +479,13 @@ fun SwipeUpToSendScreen(
             c.thresholdPx = thresholdPx
             c.haptic = haptic
             c.action = onSwipe
+            c.authenticate = { onSuccess, onFailure ->
+                context.authenticateWithDeviceCredential(
+                    title = authReason ?: tr(R.string.kp_confirm_sending_kaspa_412af),
+                    onSuccess = onSuccess,
+                    onFailure = onFailure,
+                )
+            }
             c.beforeSend = { focusManager.clearFocus() }
         }
 
@@ -478,7 +514,7 @@ fun SwipeUpToSendScreen(
                 accessibilityTitle = barTitle,
                 armed = c.armed,
                 isEnabled = isEnabled,
-                onAccessibilityClick = { if (c.active && !c.sending) c.startSending() },
+                onAccessibilityClick = { if (c.active && !c.sending) c.authenticateThenSend() },
                 modifier = Modifier
                     .windowInsetsPadding(insets.only(WindowInsetsSides.Bottom).union(WindowInsets.ime))
                     .onGloballyPositioned { c.bar = it },
@@ -494,6 +530,7 @@ fun SwipeUpToSendScreen(
                 outcome = outcome,
                 labels = labels,
                 failure = failure,
+                outcomeUnknown = outcomeUnknown,
                 isSending = c.sending,
                 armed = c.armed,
                 explorerUrl = explorerUrl,
@@ -508,7 +545,7 @@ fun SwipeUpToSendScreen(
     }
 }
 
-/** "Swipe up to Send" pinned under the form: a chevron (a check once past halfway) over the words,
+/** "Swipe up to Send" pinned under the form: a chevron (a check once past the threshold) over the words,
  *  black on a 64-high accent capsule, faded while the send isn't ready (iOS 59593af `bar`). */
 @Composable
 private fun SwipeUpBar(
@@ -557,7 +594,7 @@ private fun SwipeUpBar(
  * The full screen a swipe-up send moves to (iOS 59593af `SendProgressScreen`): a BlockDAG running
  * across while the transaction goes out, then the confirmation - what was sent, to whom, and the
  * transaction id as a link to the block explorer Settings names (or a screen's own [outcome]) -
- * or "Failed" with the error and Try Again.
+ * or "Failed" with the error and Try Again, or "Not confirmed" with only Done ([outcomeUnknown]).
  */
 @Composable
 private fun SendProgressScreen(
@@ -571,6 +608,8 @@ private fun SendProgressScreen(
     labels: SwipeUpLabels,
     /** Non-null once the send failed: the error to show. */
     failure: String?,
+    /** [failure] is a send that may have gone through, so there's nothing to try again. */
+    outcomeUnknown: Boolean,
     /** False while the swipe is still being dragged (a preview of what's coming). */
     isSending: Boolean,
     armed: Boolean,
@@ -606,7 +645,13 @@ private fun SendProgressScreen(
                     Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(44.dp))
                 }
             }
-            androidx.compose.animation.AnimatedVisibility(visible = failure != null && !done, enter = scaleIn(initialScale = 0.4f) + fadeIn(), exit = fadeOut()) {
+            androidx.compose.animation.AnimatedVisibility(visible = outcomeUnknown && !done, enter = scaleIn(initialScale = 0.4f) + fadeIn(), exit = fadeOut()) {
+                // iOS "questionmark.circle.fill" in black on orange (953b255)
+                Box(Modifier.size(72.dp).clip(CircleShape).background(colors.warning), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.QuestionMark, contentDescription = null, tint = Color.Black, modifier = Modifier.size(44.dp))
+                }
+            }
+            androidx.compose.animation.AnimatedVisibility(visible = failure != null && !done && !outcomeUnknown, enter = scaleIn(initialScale = 0.4f) + fadeIn(), exit = fadeOut()) {
                 // iOS "xmark.circle.fill" in white on red
                 Box(Modifier.size(72.dp).clip(CircleShape).background(colors.danger), contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(44.dp))
@@ -622,6 +667,7 @@ private fun SendProgressScreen(
             Text(
                 when {
                     done -> labels.doneText()
+                    outcomeUnknown -> tr(R.string.kp_not_confirmed_b9e09)
                     failure != null -> stringResource(R.string.swipe_failed)
                     isSending -> stringResource(labels.working)
                     armed -> labels.releaseText()
@@ -650,9 +696,10 @@ private fun SendProgressScreen(
                     modifier = Modifier.padding(horizontal = 32.dp),
                 )
             }
-            if (!finished) {
+            // Before that, the title above already says Keep Swiping or Release (iOS 953b255).
+            if (!finished && isSending) {
                 Text(
-                    if (isSending) stringResource(labels.workingDetail) else labels.hintText(),
+                    stringResource(labels.workingDetail),
                     color = colors.textSecondary,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center,
@@ -670,9 +717,10 @@ private fun SendProgressScreen(
                     .padding(14.dp),
                 verticalAlignment = Alignment.Top,
             ) {
-                Icon(Icons.Default.Warning, contentDescription = null, tint = colors.danger, modifier = Modifier.padding(top = 1.dp).size(16.dp))
+                val failureColor = if (outcomeUnknown) colors.warning else colors.danger
+                Icon(Icons.Default.Warning, contentDescription = null, tint = failureColor, modifier = Modifier.padding(top = 1.dp).size(16.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(failure.orEmpty(), color = colors.danger, fontSize = 15.sp)
+                Text(failure.orEmpty(), color = failureColor, fontSize = 15.sp)
             }
         }
 
@@ -688,7 +736,8 @@ private fun SendProgressScreen(
                         Modifier
                             .fillMaxWidth()
                             .sendKaspaGlass(14.dp)
-                            .clickable { uriHandler.openUri(url) }
+                            // No browser (or none that takes the link) throws: never crash on Sent.
+                            .clickable { runCatching { uriHandler.openUri(url) } }
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center,
@@ -734,11 +783,11 @@ private fun SendProgressScreen(
                     .height(56.dp)
                     .clip(CircleShape)
                     .background(KaspaTeal)
-                    .clickable(onClick = if (done) onDone else onTryAgain),
+                    .clickable(onClick = if (done || outcomeUnknown) onDone else onTryAgain),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    stringResource(if (done) R.string.done else R.string.try_again),
+                    stringResource(if (done || outcomeUnknown) R.string.done else R.string.try_again),
                     color = Color.Black,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 17.sp,

@@ -5,7 +5,11 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
@@ -64,10 +68,27 @@ class GlobalNotificationCenterStore @Inject constructor(
     private fun entriesKey(wallet: String) = "entries_$wallet"
     private fun seenKey(wallet: String) = "seen_$wallet"
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.kachat.app.util.StartupSafety.logOnlyHandler("GlobalNotifCenter"))
+
+    init {
+        // The bell is per account: loaded again whenever the account changes (sign-in, switch,
+        // import, delete), or one account's rows showed under the next (iOS 3e381db).
+        scope.launch { walletManager.activeAddressFlow.collect { reloadIfNeeded() } }
+    }
+
     /** Loads the active wallet's feed; call before reading and on account switches. */
     @Synchronized
     fun reloadIfNeeded() {
-        val wallet = walletAddressOrNull() ?: return
+        val wallet = walletAddressOrNull()
+        if (wallet == null) {
+            // No account active (the active one was deleted): nothing of the last one stays up.
+            if (loadedWallet != null) {
+                loadedWallet = null
+                _entries.value = emptyList()
+                _lastSeenAt.value = 0L
+            }
+            return
+        }
         if (loadedWallet == wallet) return
         loadedWallet = wallet
         val loaded = try {
@@ -109,6 +130,17 @@ class GlobalNotificationCenterStore @Inject constructor(
     fun clearAll() {
         _entries.value = emptyList()
         persist()
+    }
+
+    /** Delete Account: one wallet's feed, from this device (iOS 99ab88a). */
+    @Synchronized
+    fun removeAllData(walletAddress: String) {
+        prefs.edit().remove(entriesKey(walletAddress)).remove(seenKey(walletAddress)).apply()
+        if (loadedWallet == walletAddress) {
+            loadedWallet = null
+            _entries.value = emptyList()
+            _lastSeenAt.value = 0L
+        }
     }
 
     // MARK: - Group @mentions

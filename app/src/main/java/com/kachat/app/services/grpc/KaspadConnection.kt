@@ -101,9 +101,14 @@ class KaspadConnection internal constructor(
                 // handoff) without the app finding out until the next RPC silently hangs for a
                 // full 5s timeout. HTTP/2 keepalive pings detect that proactively and force gRPC
                 // to fail fast and reconnect instead.
+                //
+                // Pings only while a call is open (the message stream counts as one), never on an
+                // idle channel. The stream lives as long as the connection, so the battery side is
+                // handled by NodePoolManager closing its connections while the app is backgrounded
+                // (parkWhileBackgrounded): no open connection, no pings.
                 .keepAliveTime(20, TimeUnit.SECONDS)
                 .keepAliveTimeout(10, TimeUnit.SECONDS)
-                .keepAliveWithoutCalls(true)
+                .keepAliveWithoutCalls(false)
                 .build()
         }
     }
@@ -156,20 +161,22 @@ class KaspadConnection internal constructor(
     private val blockSubscribers = mutableSetOf<String>()
     private var blockSubscribersGeneration = -1L
 
-    /** Consecutive auto-reconnect attempts since the last successful [connect] - drives backoff
-     * so a node that's actively rejecting new streams (e.g. it logged "reached connection
-     * capacity") gets breathing room instead of a retry every ~100ms-1s indefinitely, which
-     * just keeps re-triggering the same rejection. */
+    /** Consecutive auto-reconnect attempts since the node last answered - drives backoff so a
+     * node that's actively rejecting new streams (e.g. it logged "reached connection capacity")
+     * gets breathing room instead of a retry every ~100ms-1s indefinitely, which just keeps
+     * re-triggering the same rejection. Only an answer resets it: a stream that opens says
+     * nothing about one the node then refuses (iOS 2da5f4b). */
+    @Volatile
     private var reconnectAttempts = 0
 
     fun connect() {
-        if (isConnected) return
+        if (isConnected || closed) return
         isConnected = true
-        reconnectAttempts = 0
         generation.value++
         streamJob = scope.launch {
             try {
                 stub.messageStream(outbound.receiveAsFlow()).collect { response ->
+                    reconnectAttempts = 0
                     val matched = pending.remove(response.id)
                     if (matched != null) {
                         matched.complete(response)
@@ -237,6 +244,10 @@ class KaspadConnection internal constructor(
         val deferred = CompletableDeferred<Messages.KaspadResponse>()
         pending[id] = deferred
         try {
+            // Closed while the caller still held it: nothing can answer, so fail now and not at
+            // the timeout, like a connection that never came up (iOS 2da5f4b). After the put, so
+            // a close() racing this is either seen here or fails the entry itself.
+            if (closed) throw IllegalStateException("Not connected to $address")
             outbound.send(build(id))
             return withTimeout(timeoutMs) { extract(deferred.await()) }
         } finally {
@@ -290,6 +301,11 @@ class KaspadConnection internal constructor(
             extract = { it.getUtxosByAddressesResponse }
         )
         if (response.hasError()) throw IllegalStateException(response.error.message)
+        // coins for addresses not asked about are a broken answer: refused (iOS 2da5f4b)
+        val requested = addresses.map { it.lowercase() }.toSet()
+        if (!response.entriesList.all { it.address.isEmpty() || it.address.lowercase() in requested }) {
+            throw IllegalStateException("UTXO response for addresses not requested")
+        }
         // more than the Kaspa supply (a coin, or all of them) is a broken or hostile node's:
         // refused here, where it's decoded (iOS 283cd28, IOS-020)
         return com.kachat.app.util.UtxoMath.checkedFromNetwork(response.entriesList) { it.utxoEntry.amount }
@@ -467,7 +483,8 @@ class KaspadConnection internal constructor(
         )
 
         if (response.hasError()) {
-            throw IllegalStateException(response.error.message)
+            // the node's verdict on the transaction, not a lost answer (iOS 0799cec)
+            throw com.kachat.app.services.NodeRejectedTransactionException(response.error.message)
         }
         return response.transactionId
     }
@@ -476,8 +493,10 @@ class KaspadConnection internal constructor(
      * Whether this node holds [transactionId] in its mempool, orphan pool included (iOS
      * `queryMempoolEntryFromConnection`, 2 s). False for "not in the mempool" (an RPC error) and
      * for any failure - this only ever answers "known here", never "unknown everywhere".
+     * [includeOrphanPool] false asks the transaction pool alone: an orphan lands only if its
+     * parent does, so it doesn't count as a sent transaction.
      */
-    suspend fun hasMempoolEntry(transactionId: String, timeoutMs: Long = 2000): Boolean {
+    suspend fun hasMempoolEntry(transactionId: String, timeoutMs: Long = 2000, includeOrphanPool: Boolean = true): Boolean {
         return try {
             val response = call(
                 timeoutMs = timeoutMs,
@@ -486,7 +505,7 @@ class KaspadConnection internal constructor(
                         this.id = id
                         getMempoolEntryRequest = getMempoolEntryRequestMessage {
                             txId = transactionId
-                            includeOrphanPool = true
+                            this.includeOrphanPool = includeOrphanPool
                             filterTransactionPool = false
                         }
                     }
@@ -508,7 +527,10 @@ class KaspadConnection internal constructor(
         isConnected = false
         generation.value++
         streamJob?.cancel()
-        pending.values.forEach { it.cancel() }
+        // A failure, not a cancel: the callers are still running, and a cancelled await would read
+        // as their own cancellation (iOS's "Connection closed").
+        val closing = java.io.IOException("Connection closed")
+        pending.values.forEach { it.completeExceptionally(closing) }
         pending.clear()
         channel.shutdownNow()
     }

@@ -58,4 +58,28 @@ class PendingSpentOutpointsTest {
         // Another address is not affected.
         assertEquals(listOf(a, b), pending.filter("kaspa:qpother", listOf(a, b)))
     }
+
+    // Every node-pool submit's coins (iOS 1652437 `reserveOutpoints`)
+
+    @Test
+    fun `a submit's coins are held for the whole hold, whatever the address or case`() {
+        val hold = SubmittedOutpointHold(ttlMs = 120_000L, now = { clock })
+        hold.reserve(listOf("A:0"))
+        assertEquals(listOf(b, c), hold.unreserved(listOf(a, b, c)) { KaspaWalletEngine.outpointKey(it.outpoint) })
+        assertEquals(true, hold.isHeld("a:0"))
+        // another output of the same transaction is another coin
+        assertEquals(false, hold.isHeld("a:1"))
+        clock += 119_000L
+        assertEquals(true, hold.isHeld("a:0"))
+        clock += 2_000L
+        assertEquals(false, hold.isHeld("a:0"))
+        assertEquals(listOf(a, b, c), hold.unreserved(listOf(a, b, c)) { KaspaWalletEngine.outpointKey(it.outpoint) })
+    }
+
+    @Test
+    fun `holding nothing leaves every coin`() {
+        val hold = SubmittedOutpointHold(ttlMs = 120_000L, now = { clock })
+        hold.reserve(emptyList())
+        assertEquals(listOf(a, b), hold.unreserved(listOf(a, b)) { KaspaWalletEngine.outpointKey(it.outpoint) })
+    }
 }

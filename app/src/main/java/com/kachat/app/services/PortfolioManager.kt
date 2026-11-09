@@ -215,6 +215,12 @@ class PortfolioManager @Inject constructor(
         return true
     }
 
+    /** Delete Account: which portfolio [walletAddress] had open (iOS `clearAllLocalData`). */
+    fun forgetActivePortfolio(walletAddress: String) {
+        runCatching { sharedPrefs.edit().remove(activePortfolioKey(walletAddress)).apply() }
+            .onFailure { android.util.Log.w("PortfolioManager", "Portfolio selection not removed", it) }
+    }
+
     fun setActivePortfolio(id: String) {
         val address = walletManager.getAddress()
         runCatching { sharedPrefs.edit().putString(activePortfolioKey(address), id).apply() }

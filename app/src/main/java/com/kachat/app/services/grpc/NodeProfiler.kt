@@ -29,11 +29,10 @@ data class NodeProbeResult(
 suspend fun probeExisting(
     address: String,
     connection: KaspadConnection,
-    // Discovery races many candidates in parallel and serves the first responder (see
-    // NodePoolManager.probeCycle) — a tighter bound there keeps one dead candidate from
-    // holding the "all probed" verdict open for the full default RPC timeout. The pinned
-    // trusted node keeps the default: it is the only node, often TLS behind slower home
-    // links, and a spuriously failed probe there flips the whole app's status dot.
+    // Discovery races many candidates in parallel with its own bound (see
+    // NodePoolManager.discoveryProbeTimeoutMillis). The pinned trusted node keeps the default:
+    // it is the only node, often TLS behind slower home links, and a spuriously failed probe
+    // there flips the whole app's status dot.
     timeoutMs: Long = 5000
 ): NodeProbeResult {
     val start = System.currentTimeMillis()

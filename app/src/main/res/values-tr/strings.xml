@@ -3,7 +3,6 @@
     <string name="kas">.kas</string>
     <string name="n_0_00">0.00</string>
     <string name="n_12_words">12 kelime</string>
-    <string name="a_kns_inscription_s_commit_transaction">Bir KNS yazitinin taahhut islemi gerceklesti, ancak acilma hicbir zaman tamamlanmadi. Tamamlamak icin simdi tekrar deneyin; bunu yapana kadar fonlar guvenle baglidir.</string>
     <string name="accept">Kabul Et</string>
     <string name="account_name">Hesap Adı</string>
     <string name="active_nodes">Aktif Düğümler</string>
@@ -20,7 +19,7 @@
     <string name="all_discovered_nodes_sorted_by_state">Keşfedilen tüm düğümler duruma ve gecikmeye göre sıralanır. Düğümler host:port\'a göre tekilleştirilir.</string>
     <string name="amount_kas">Tutar (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">Ayni kanal adina katilan herkes orada mesajlari gorebilir ve gonderebilir. Sahibi veya davetiyesi yoktur.</string>
-    <string name="anyone_with_your_seed_phrase_can">Kurtarma ifadenize sahip olan herkes hesabiniza erisebilir. Asla kimseyle paylasmayin. Yalnizca yazili olarak not aldiginizdan emin olun. Asla ekran goruntusu almayin veya cihazinizda saklamayin.</string>
+    <string name="anyone_with_your_seed_phrase_can">12 veya 24 kelimene sahip olan herkes hesabına erişebilir. Bunları asla kimseyle paylaşma.</string>
     <string name="back">Geri</string>
     <string name="before_you_swap">Takas Yapmadan Once</string>
     <string name="broadcasting">Yayinlaniyor...</string>
@@ -111,7 +110,7 @@
     <string name="join">Katil</string>
     <string name="join_or_create_a_channel">Kanala Katil veya Olustur</string>
     <string name="kas_2">KAS</string>
-    <string name="kns_domains">KNS Alan Adları</string>
+    <string name="kns_domains">Alan Adların</string>
     <string name="kachat">KaChat</string>
     <string name="kachat_logo">KaChat Logosu</string>
     <string name="kachat_can_t_show_notifications_until">Bu uygulama icin izin vermedikce KaPay bildirim gosteremez.</string>
@@ -187,7 +186,6 @@
     <string name="resolving_domain">Alan adi cozumleniyor…</string>
     <string name="retention">Saklama</string>
     <string name="retry">Tekrar Dene</string>
-    <string name="retry_inscription_reveal">Yazit Acilmasini Tekrar Dene</string>
     <string name="save">Kaydet</string>
     <string name="saved_accounts">Kaydedilen Hesaplar</string>
     <string name="scan">Tara</string>
@@ -199,7 +197,7 @@
     <string name="search_chats">Sohbet ara</string>
     <string name="secure_messaging_on_kaspa_blockdag">Kaspa BlockDAG üzerinde güvenli mesajlaşma</string>
     <string name="security_warning">Güvenlik Uyarısı</string>
-    <string name="seed_phrase">Seed Phrase</string>
+    <string name="seed_phrase">12 veya 24 Kelime</string>
     <string name="select_time">Saat Sec</string>
     <string name="select_chat">Sohbet sec</string>
     <string name="send">Gonder</string>
@@ -220,7 +218,7 @@
     <string name="swaps_are_processed_by_changenow_a">Takaslar ucuncu taraf bir borsa olan ChangeNOW tarafindan islenir. Devam ederek, ChangeNOW\'un kendi Hizmet Sartlarini okudugunuzu ve kabul ettiginizi onaylarsiniz. KaChat yalnizca takas talebinizi gonderir ve durumunu gosterir; KaChat basarisiz, gecikmis veya kaybolmus takaslardan sorumlu degildir. Bir takas gerceklesmezse dogrudan ChangeNOW destegiyle iletisime gecin.</string>
     <string name="tap_an_address_below_to_swap">Bir adresten takas yapmak icin asagida bir adrese dokunun</string>
     <string name="tap_an_address_below_to_use">Kullanmak icin asagida bir adrese dokunun</string>
-    <string name="tap_to_reveal_seed_phrase">Seed phrase\'i görmek için dokun</string>
+    <string name="tap_to_reveal_seed_phrase">12 veya 24 kelimeni göstermek için dokun</string>
     <string name="this_could_take_a_few_minutes">Zincir uzerinde onaylanirken birkac dakika surebilir.</string>
     <string name="this_only_removes_it_from_kachat">Bu, yalnizca KaPay\'in izleme listesinden kaldirir. KasSigner cihazi veya tuttugu fonlar uzerinde hicbir etkisi yoktur.</string>
     <string name="this_permanently_deletes_every_message_with">Bu, bu cihazda onlarla olan her mesaji kalici olarak siler. Bu geri alinamaz; onlara tekrar mesaj yazmak tamamen yeni bir konusma baslatir.</string>
@@ -332,7 +330,7 @@
     <string name="version">Sürüm</string>
     <string name="vibration">Titreşim</string>
     <string name="view_profile">Profili Goruntule</string>
-    <string name="view_seed_phrase">Seed Phrase Görüntüle</string>
+    <string name="view_seed_phrase">12 veya 24 Kelimeyi Görüntüle</string>
     <string name="view_in_explorer">Kesif Motorunda Goruntule</string>
     <string name="website">Web Sitesi</string>
     <string name="x">X</string>
@@ -480,7 +478,7 @@
     <!-- .kachat listing, buy and offer (iOS cd9e10c, 0e50fdf) -->
     <string name="kl_offers">Teklifler</string>
     <string name="kl_offer">Teklif</string>
-    <string name="kl_offer_detail">Kendi fiyatını belirle. KAS\'ın satıcı kabul edene, teklifi geri çekene ya da süresi dolana kadar zincirde bekler - önce satıcıya mesaj da atabilirsin.</string>
+    <string name="kl_offer_detail">Kendi fiyatını belirle. KAS\'ın, satıcı kabul edene, teklifi geri çekene veya süresi dolana kadar zincirde bekler.</string>
     <string name="kl_listing">İlan</string>
     <string name="kl_price">Fiyat</string>
     <string name="kl_buy_now">Hemen Al</string>
@@ -971,7 +969,7 @@
     <string name="create_wallet_name_title">Cüzdanınız için bir ad oluşturun</string>
     <string name="create_wallet_name_detail">Bu ad yalnızca bu cihazda saklanır ve cüzdanlarınızı ayırt etmenizi sağlar. Başka hiç kimse onu görmez.</string>
     <string name="create_wallet_seed_next_warning">Sonraki ekran seed phrase\'inizi gösterir. Hesabınızı kurtarmanın tek yolu budur: yazın, güvenli bir yerde saklayın ve ekranınızı kimsenin görmediğinden emin olun.</string>
-    <string name="choose_seed_phrase_length">Seed phrase uzunluğunu seçin</string>
+    <string name="choose_seed_phrase_length">12 veya 24 kelime seç</string>
     <!-- Create Account, step 3: the seed phrase (iOS CreateWalletSeedStep) -->
     <string name="write_down_your_seed_phrase">Seed Phrase\'inizi Yazın</string>
     <string name="store_this_in_a_safe_place_anyone_with_these_words">Bunu güvenli bir yerde saklayın. Bu kelimelere sahip herkes hesabınıza erişebilir.</string>
@@ -1030,9 +1028,9 @@
     <string name="kn_commit_waiting_busy">Ağ yoğun. Taahhüdünüz bir blok bekliyor.</string>
     <string name="kn_commit_sent_again">Ağ yoğun, bu yüzden taahhüt yeniden gönderildi.</string>
     <!-- Onboarding: import length step and the seed phrase explainer (iOS dd0aab1) -->
-    <string name="import_seed_length_detail">İçe aktardığınız seed phrase kaç kelime?</string>
+    <string name="import_seed_length_detail">Kaç kelime içe aktarıyorsun?</string>
     <string name="what_is_this">Bu nedir?</string>
-    <string name="what_is_a_seed_phrase">Seed phrase nedir?</string>
+    <string name="what_is_a_seed_phrase">12 veya 24 kelimem nedir?</string>
     <string name="seed_phrase_explainer_master_key">Seed phrase, hesabınızın ana anahtarı olarak çalışan 12 ya da 24 sıradan kelimeden oluşan bir listedir. Cüzdanınız, sohbet adresiniz ve mesajlarınız hep ondan gelir.</string>
     <string name="seed_phrase_explainer_anyone">Bu kelimelere sahip olan herkes hesabınızdaki her şeyi alabilir. Onları kaybeder ve bu cihazı da kaybederseniz, hesabınızı kimse geri getiremez, KaPay bile.</string>
     <string name="seed_phrase_explainer_paper">Kelimeleri sırasıyla kağıda yazın ve güvenli, özel bir yerde saklayın. Onları asla bir web sitesine yazmayın, sohbette göndermeyin ve ekran görüntüsünde ya da bulut notlarında tutmayın.</string>
@@ -1048,7 +1046,7 @@
     <string name="cache_web_responses">Web yanıtları</string>
     <string name="cache_web_responses_detail">Sistemin ağ önbelleğinde tutulan bağlantı önizlemeleri ve API yanıtları.</string>
     <string name="cache_temporary_files">Geçici dosyalar</string>
-    <string name="cache_temporary_files_detail">Fotoğraf ve sesli not gönderirken oluşan geçici dosyalar. Her zaman silinebilir.</string>
+    <string name="cache_temporary_files_detail">Uygulamanın artık ihtiyaç duymadığı geçici dosyalar. İstediğin zaman güvenle kaldırabilirsin.</string>
     <!-- Import Account, the words screen (iOS ImportWalletView) -->
     <string name="import_words_continue">Devam</string>
     <!-- .kachat Renew: choose the period first (iOS 26bd5dc) -->
@@ -1379,4 +1377,7 @@
     <string name="kaspa_node_settings_footer">Otomatik Tarama en iyi düğümleri bulur ve bağlanır. Belirli bir düğüm seçmek yalnızca ona bağlanır, başkalarına geçmez. Diğer sekmelerdeki dizinleyicileri, alan adlarını veya gezgini etkilemez. Burada seçmek için kendi adreslerini aşağıdaki IP Adres Defteri\'ne ekle.</string>
     <string name="ab_picker_empty_body">Kişileri Cüzdan > Kişiler bölümünden ekle.</string>
     <string name="ab_no_contacts">Henüz kişi yok</string>
+    <string name="where_is_this_seed_phrase_from">12 veya 24 kelimen nereden?</string>
+    <string name="different_wallets_store_your_kaspa">Farklı cüzdanlar Kaspa\'nı farklı adres yollarında saklar. KaPay\'in fonlarını ve alan adlarını bulabilmesi için bu kelimelerin nereden geldiğini seç.</string>
+    <string name="import_words_enter_recovery_phrase">12 veya 24 kelimeni gir</string>
 </resources>

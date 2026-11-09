@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import androidx.compose.foundation.layout.statusBars
 
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -217,6 +218,9 @@ private fun priceRangeLabel(days: Int): String = when (days) {
 @Composable
 fun PortfolioScreen(
     navController: NavController,
+    // MainShell's one WalletViewModel, for the backup banner: a hiltViewModel() here would be a
+    // second instance re-running its init (balance refresh, push registration) for this tab.
+    walletViewModel: com.kachat.app.viewmodels.WalletViewModel,
     viewModel: PortfolioViewModel = hiltViewModel(),
 ) {
     val currentPriceUsd by viewModel.currentPriceUsd.collectAsState()
@@ -294,6 +298,7 @@ fun PortfolioScreen(
         topBar = {
             MainPageHeader(
                 title = stringResource(R.string.portfolio),
+                banner = { AccountBackupBanner(walletViewModel) { navController.navigate("account_backup") } },
                 actions = {
                     // One tap turns every amount on this screen into dots - for reading the
                     // Portfolio somewhere with people around. The KAS price and the percentages
@@ -552,7 +557,7 @@ private fun PortfolioTransactionsContent(
                 )
             } else {
                 Text(
-                    "Select",
+                    tr(R.string.kp_select_85982),
                     color = if (transactions.isEmpty()) LocalAppColors.current.textSecondary else KaspaTeal,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp,
@@ -747,7 +752,7 @@ private fun PortfolioTransactionsContent(
                                         context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                                     } ?: throw java.io.IOException("Couldn't write the CSV file")
                                     val name = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.endsWith(".csv") }
-                                        ?: "${com.kachat.app.repository.PortfolioRepository.DEFAULT_EXPORT_NAME} ${System.currentTimeMillis()}.csv"
+                                        ?: "${com.kachat.app.repository.PortfolioRepository.DEFAULT_EXPORT_NAME}.csv"
                                     // keepSpaces: the portfolio's name stays readable in Nextcloud (iOS 87b2a0b).
                                     val path = viewModel.nextcloud.uploadToKaChatFolder(bytes, name, "text/csv", keepSpaces = true)
                                     context.getString(R.string.pnc_saved_to, path) to false
@@ -821,7 +826,7 @@ private fun PortfolioTransactionsContent(
                     color = LocalAppColors.current.textPrimary
                 )
             },
-            text = { Text("This can't be undone.", color = LocalAppColors.current.textSecondary) },
+            text = { Text(tr(R.string.kp_this_can_t_be_undone_fe63a), color = LocalAppColors.current.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     selectedIds.forEach { viewModel.deleteTransaction(it) }
@@ -917,7 +922,7 @@ private fun PortfolioActionsSectionTitle(title: String, topPadding: androidx.com
 private fun showCsvImportToast(result: com.kachat.app.repository.PortfolioRepository.CsvImportResult?) {
     val count = result?.count ?: 0
     if (count <= 0) {
-        IosToasts.error("Import failed. Check the CSV format")
+        IosToasts.error(tr(R.string.kp_import_failed_check_the_csv_format_7ae19))
         return
     }
     val rows = if (count == 1) "1 transaction" else "$count transactions"
@@ -1014,7 +1019,7 @@ private fun AddressEntryDialog(
     }
 
     ActionSheetContainer(
-        title = if (presetAddress == null) "Add Kaspa Address" else stringResource(R.string.portfolio_add_chatting_address),
+        title = if (presetAddress == null) tr(R.string.kp_add_kaspa_address_5dd6b) else stringResource(R.string.portfolio_add_chatting_address),
         subtitle = null,
         // Held open while the import runs - dismissing mid-import would abandon the only
         // progress readout while the work carried on regardless.
@@ -1113,7 +1118,7 @@ private fun AddressEntryDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, disabledContainerColor = LocalAppColors.current.surfaceVariant),
                     modifier = Modifier.fillMaxWidth().height(52.dp)
                 ) {
-                    Text("Import", color = if (isValid) Color.Black else LocalAppColors.current.textSecondary, fontWeight = FontWeight.Bold)
+                    Text(tr(R.string.kp_import_d6fbc), color = if (isValid) Color.Black else LocalAppColors.current.textSecondary, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(8.dp))
             }
@@ -1137,7 +1142,7 @@ private fun PortfolioSummaryCard(
             .padding(14.dp)
     ) {
         Text(
-            if (scrubbedPrice != null) formatDateTime(scrubbedPrice.first) else "KAS Price",
+            if (scrubbedPrice != null) formatDateTime(scrubbedPrice.first) else tr(R.string.kp_kas_price_bb9bb),
             color = LocalAppColors.current.textSecondary,
             fontSize = 12.sp
         )
@@ -1326,7 +1331,7 @@ private fun PortfolioValueChartCard(valueHistory: List<Pair<Long, Double>>, curr
             val (ts, value) = valueHistory[selectedIndex]
             Triple("Value on ${formatDateTime(ts)}", ts, value)
         } else {
-            Triple("Value Over Time", valueHistory.last().first, valueHistory.last().second)
+            Triple(tr(R.string.kp_value_over_time_9c398), valueHistory.last().first, valueHistory.last().second)
         }
         Text(headerLabel, color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
         Text(money(headerValue, currencyCode), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
@@ -1401,13 +1406,13 @@ private fun PortfolioLauncherSquares(
         LauncherSquare(
             modifier = Modifier.weight(1f),
             onClick = onOpenValue,
-            title = "Value",
+            title = tr(R.string.kp_value_8dce1),
             value = money(summary.currentValue, currencyCode),
             // The last 24 hours, not all-time P&L. A number that only ever grows over the life of
             // the portfolio says nothing about today, and it sat beside the Kaspa square's 24h
             // figure reading as though the two were comparable.
             changePercent = valueChange24hPercent,
-            emptyChangeLabel = "24h change not available yet",
+            emptyChangeLabel = tr(R.string.kp_24h_change_not_available_yet_d9a7b),
             headerIcon = {
                 // chart.line.uptrend.xyaxis in subheadline, secondary.
                 UptrendChartGlyph(size = 19.dp, color = LocalAppColors.current.textSecondary)
@@ -1976,7 +1981,7 @@ private fun MarketStatsCard(marketCap: Double?, rank: Int?, currencyCode: String
     ) {
         if (rank != null) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Rank", color = colors.textSecondary, fontSize = 15.sp)
+                Text(tr(R.string.kp_rank_dd48a), color = colors.textSecondary, fontSize = 15.sp)
                 Text("#$rank", color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             }
         }
@@ -1985,7 +1990,7 @@ private fun MarketStatsCard(marketCap: Double?, rank: Int?, currencyCode: String
         }
         if (marketCap != null) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Market Cap", color = colors.textSecondary, fontSize = 15.sp)
+                Text(tr(R.string.kp_market_cap_d5533), color = colors.textSecondary, fontSize = 15.sp)
                 Text(
                     formatCompactFiat(marketCap, currencyCode),
                     color = colors.textPrimary,
@@ -2109,9 +2114,9 @@ internal fun ChartPairSheet(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Text("Compare Against", color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text(tr(R.string.kp_compare_against_786a7), color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Text(
-                        "Tap the price or your value to see it in the pair you pick here. One at a time.",
+                        tr(R.string.kp_tap_the_price_or_your_value_7e294),
                         color = colors.textSecondary,
                         fontSize = 14.sp,
                         textAlign = TextAlign.Center,
@@ -2242,7 +2247,7 @@ fun PortfolioPriceChartScreen(
         contentWindowInsets = WindowInsets(0),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("KAS Price", color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp) },
+                title = { Text(tr(R.string.kp_kas_price_bb9bb), color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp) },
                 navigationIcon = { SheetBarBackButton({ navController.popBackStack() }, Modifier.padding(start = 12.dp)) },
                 actions = {
                     // iOS ChartPairSettingsButton: SF "gearshape" - the outlined gear - in the accent.
@@ -2449,7 +2454,7 @@ fun PortfolioValueChartScreen(
         contentWindowInsets = WindowInsets(0),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Value Over Time", color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp) },
+                title = { Text(tr(R.string.kp_value_over_time_9c398), color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp) },
                 actions = {
                     // iOS ChartPairSettingsButton: SF "gearshape" - the outlined gear - in the accent.
                     SheetBarIconButton(
@@ -2487,7 +2492,7 @@ fun PortfolioValueChartScreen(
         ) {
             // iOS header: VStack(spacing: 4).
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Portfolio Value", color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 20.sp)
+                Text(tr(R.string.kp_portfolio_value_37958), color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 20.sp)
                 scrubbed?.let {
                     Text(formatChartDate(it.first, withTime = false), color = colors.textSecondary, fontSize = 15.sp)
                 }
@@ -2573,7 +2578,7 @@ fun PortfolioValueChartScreen(
             } else {
                 Box(modifier = Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        "Not enough history yet - check back after a few days of activity.",
+                        tr(R.string.kp_not_enough_history_yet_check_back_7c2eb),
                         color = colors.textSecondary,
                         fontSize = 15.sp,
                         textAlign = TextAlign.Center
@@ -2755,8 +2760,8 @@ private fun TransactionRow(
                 Text(
                     when {
                         isTransfer -> stringResource(R.string.portfolio_type_transfer)
-                        isBuy -> "Buy"
-                        else -> "Sell"
+                        isBuy -> tr(R.string.kp_buy_7ceca)
+                        else -> tr(R.string.kp_sell_fa3cf)
                     },
                     color = colors.textPrimary,
                     fontWeight = FontWeight.Medium,
@@ -2787,7 +2792,7 @@ private fun TransactionRow(
         if (!selecting && onDelete != null) {
             Spacer(Modifier.width(8.dp))
             IconButton(onClick = onDelete, modifier = Modifier.size(20.dp)) {
-                Icon(Icons.Default.Delete, "Delete", tint = colors.danger, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Delete, tr(R.string.kp_delete_f6fdb), tint = colors.danger, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -2858,15 +2863,15 @@ private fun TransactionDialog(
         Surface(color = LocalAppColors.current.surface, shape = RoundedCornerShape(20.dp)) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (existing != null) "Edit Transaction" else "Add Transaction", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text(if (existing != null) tr(R.string.kp_edit_transaction_8172a) else tr(R.string.kp_add_transaction_ea77f), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                     IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, "Close", tint = LocalAppColors.current.textSecondary)
+                        Icon(Icons.Default.Close, tr(R.string.kp_close_bbfa7), tint = LocalAppColors.current.textSecondary)
                     }
                 }
                 Spacer(Modifier.height(16.dp))
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Buy" to "buy", "Sell" to "sell", stringResource(R.string.portfolio_type_transfer) to "transfer").forEach { (label, value) ->
+                    listOf(tr(R.string.kp_buy_7ceca) to "buy", tr(R.string.kp_sell_fa3cf) to "sell", stringResource(R.string.portfolio_type_transfer) to "transfer").forEach { (label, value) ->
                         Surface(
                             color = if (type == value) KaspaTeal else LocalAppColors.current.surfaceVariant,
                             shape = RoundedCornerShape(20.dp),
@@ -3008,7 +3013,7 @@ private fun TransactionDialog(
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) {
                     Text(
-                        if (existing != null) "Save Changes" else "Add Transaction",
+                        if (existing != null) "Save Changes" else tr(R.string.kp_add_transaction_ea77f),
                         color = if (isValid) Color.Black else LocalAppColors.current.textSecondary,
                         fontWeight = FontWeight.Bold
                     )
@@ -3148,10 +3153,10 @@ private fun KasConverterCard(price: Double?, currencyCode: String) {
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Converter", color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+        Text(tr(R.string.kp_converter_3615e), color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
 
         ConverterRow(
-            title = "KAS",
+            title = tr(R.string.kp_kas_b358b),
             text = kasText,
             // Grouped as you type - "1200000" is a number you have to count digits on.
             onTextChange = {
@@ -3159,7 +3164,7 @@ private fun KasConverterCard(price: Double?, currencyCode: String) {
                 editing = "kas"
                 recompute("kas")
             },
-            trailing = "KAS",
+            trailing = tr(R.string.kp_kas_b358b),
         )
         ConverterRow(
             title = currencyCode.uppercase(Locale.US),
@@ -3178,7 +3183,7 @@ private fun KasConverterCard(price: Double?, currencyCode: String) {
             text = if (price != null) {
                 "1 KAS = ${currencySymbolFor(currencyCode)}${formatFullPrecision(price)}"
             } else {
-                "Waiting for a price..."
+                tr(R.string.kp_waiting_for_a_price_c88b2)
             },
             color = colors.textSecondary,
             fontSize = 12.sp
@@ -3534,7 +3539,7 @@ private fun NetworkHashrateCard(
             // "Network Hashrate" breaks onto two lines there. Roboto is narrower and would
             // fit on one, so the label gets the width at which it breaks the same way.
             Text(
-                "Network Hashrate",
+                tr(R.string.kp_network_hashrate_c3cc8),
                 color = colors.textSecondary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 15.sp,
@@ -3603,7 +3608,7 @@ fun PortfolioHashrateChartScreen(
         contentWindowInsets = WindowInsets(0),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Network Hashrate", color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp) },
+                title = { Text(tr(R.string.kp_network_hashrate_c3cc8), color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp) },
                 navigationIcon = { SheetBarBackButton({ navController.popBackStack() }, Modifier.padding(start = 12.dp)) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background)
             )
@@ -3642,7 +3647,7 @@ fun PortfolioHashrateChartScreen(
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PickaxeIcon(iconSize = 20.dp)
-                    Text("Kaspa Network", color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 20.sp)
+                    Text(tr(R.string.kp_kaspa_network_fceee), color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 20.sp)
                 }
                 scrubbed?.let {
                     Text(formatChartDate(it.first, withTime = false), color = colors.textSecondary, fontSize = 15.sp)
@@ -3733,7 +3738,7 @@ fun PortfolioHashrateChartScreen(
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("About Hashrate", color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                Text(tr(R.string.kp_about_hashrate_e7fb8), color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                 Text(
                     "Hashrate is how much computing power miners are pointing at Kaspa. A higher " +
                         "hashrate means more work securing the chain, and it moves with mining " +
@@ -3798,7 +3803,7 @@ private fun MiningEstimateCard(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Mining Estimate", color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+        Text(tr(R.string.kp_mining_estimate_f1a76), color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             IosNumberField(
@@ -3844,7 +3849,7 @@ private fun MiningEstimateCard(
             )
         } else {
             Text(
-                "Enter your hashrate to estimate earnings.",
+                tr(R.string.kp_enter_your_hashrate_to_estimate_earnings_90f5d),
                 color = colors.textSecondary,
                 fontSize = 15.sp
             )

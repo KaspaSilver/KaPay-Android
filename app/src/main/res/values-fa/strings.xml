@@ -11,7 +11,6 @@
     <string name="kas">.kas</string>
     <string name="n_0_00">0.00</string>
     <string name="n_12_words">۱۲ کلمه</string>
-    <string name="a_kns_inscription_s_commit_transaction">تراکنش تعهد یک کتیبه KNS انجام شد، اما رونمایی هرگز کامل نشد. اکنون دوباره امتحان کنید تا آن را کامل کنید؛ وجوه تا زمانی که این کار را انجام دهید ایمن هستند.</string>
     <string name="accept">پذیرش</string>
     <string name="account_actions">عملیات حساب</string>
     <string name="account_name">نام حساب</string>
@@ -32,7 +31,7 @@
     <string name="all_discovered_nodes_sorted_by_state">همه گره‌های کشف‌شده بر اساس وضعیت و تاخیر مرتب شده‌اند. گره‌های تکراری بر اساس host:port حذف می‌شوند.</string>
     <string name="amount_kas">مبلغ (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">هر کسی که به همان نام کانال بپیوندد می‌تواند پیام‌ها را آنجا ببیند و ارسال کند. مالک یا دعوتی وجود ندارد.</string>
-    <string name="anyone_with_your_seed_phrase_can">هر کسی که عبارت بازیابی شما را داشته باشد می‌تواند به حساب شما دسترسی پیدا کند. هرگز آن را با کسی به اشتراک نگذارید. مطمئن شوید که فقط آن را یادداشت می‌کنید. هرگز از آن اسکرین‌شات نگیرید یا آن را در دستگاه خود ذخیره نکنید.</string>
+    <string name="anyone_with_your_seed_phrase_can">هر کسی که ۱۲ یا ۲۴ کلمه شما را داشته باشد می‌تواند به حسابتان دسترسی پیدا کند. هرگز آن‌ها را با کسی به اشتراک نگذارید.</string>
     <string name="back">بازگشت</string>
     <string name="balance">موجودی</string>
     <string name="before_you_swap">قبل از تبدیل</string>
@@ -131,7 +130,7 @@
     <string name="join">پیوستن</string>
     <string name="join_or_create_a_channel">پیوستن به کانال یا ایجاد آن</string>
     <string name="kas_2">KAS</string>
-    <string name="kns_domains">دامنه‌های KNS</string>
+    <string name="kns_domains">دامنه‌های شما</string>
     <string name="kachat">KaChat</string>
     <string name="kachat_logo">لوگوی KaChat</string>
     <string name="kachat_can_t_show_notifications_until">KaPay تا زمانی که اعلان‌ها را برای این برنامه مجاز نکنید نمی‌تواند اعلان‌ها را نمایش دهد.</string>
@@ -217,7 +216,6 @@
     <string name="resolving_domain">در حال تحلیل دامنه…</string>
     <string name="retention">نگهداری</string>
     <string name="retry">تلاش مجدد</string>
-    <string name="retry_inscription_reveal">تلاش مجدد برای رونمایی کتیبه</string>
     <string name="save">ذخیره</string>
     <string name="saved_accounts">حساب‌های ذخیره‌شده</string>
     <string name="scan">اسکن</string>
@@ -229,7 +227,7 @@
     <string name="search_chats">جستجوی گفتگوها</string>
     <string name="secure_messaging_on_kaspa_blockdag">پیام‌رسانی امن روی Kaspa BlockDAG</string>
     <string name="security_warning">هشدار امنیتی</string>
-    <string name="seed_phrase">عبارت بازیابی</string>
+    <string name="seed_phrase">۱۲ یا ۲۴ کلمه</string>
     <string name="select_time">انتخاب زمان</string>
     <string name="select_all">انتخاب همه</string>
     <string name="select_chat">انتخاب گفتگو</string>
@@ -252,7 +250,7 @@
     <string name="swaps_are_processed_by_changenow_a">تبدیل‌ها توسط ChangeNOW، یک سرویس تبادل شخص ثالث، پردازش می‌شوند. با ادامه دادن، تأیید می‌کنید که شرایط خدمات مخصوص ChangeNOW را خوانده و پذیرفته‌اید. KaChat فقط درخواست تبدیل شما را ارسال کرده و وضعیت آن را نمایش می‌دهد؛ KaChat مسئول تبدیل‌های ناموفق، تأخیری یا گم‌شده نیست. اگر تبدیلی انجام نشد، مستقیماً با پشتیبانی ChangeNOW تماس بگیرید.</string>
     <string name="tap_an_address_below_to_swap">برای تبدیل از یک آدرس، روی آن در زیر ضربه بزنید</string>
     <string name="tap_an_address_below_to_use">برای استفاده از یک آدرس، روی آن در زیر ضربه بزنید</string>
-    <string name="tap_to_reveal_seed_phrase">برای نمایش عبارت بازیابی بزنید</string>
+    <string name="tap_to_reveal_seed_phrase">برای نمایش ۱۲ یا ۲۴ کلمه ضربه بزنید</string>
     <string name="this_could_take_a_few_minutes">این ممکن است چند دقیقه طول بکشد تا در زنجیره تأیید شود.</string>
     <string name="this_only_removes_it_from_kachat">این فقط آن را از فهرست نظارت KaPay حذف می‌کند. هیچ تأثیری بر دستگاه KasSigner یا وجوهی که نگه می‌دارد ندارد.</string>
     <string name="this_permanently_deletes_every_message_with">این هر پیام با آن‌ها را در این دستگاه برای همیشه حذف می‌کند. این قابل بازگشت نیست؛ پیام دادن دوباره به آن‌ها یک گفتگوی کاملاً جدید شروع می‌کند.</string>
@@ -366,7 +364,7 @@
     <string name="version">نسخه</string>
     <string name="vibration">لرزش</string>
     <string name="view_profile">مشاهده پروفایل</string>
-    <string name="view_seed_phrase">مشاهده عبارت بازیابی</string>
+    <string name="view_seed_phrase">مشاهده ۱۲ یا ۲۴ کلمه</string>
     <string name="view_in_explorer">مشاهده در کاوشگر</string>
     <string name="website">وب‌سایت</string>
     <string name="x">X</string>
@@ -514,7 +512,7 @@
     <!-- .kachat listing, buy and offer (iOS cd9e10c, 0e50fdf) -->
     <string name="kl_offers">پیشنهادها</string>
     <string name="kl_offer">پیشنهاد</string>
-    <string name="kl_offer_detail">قیمت خودتان را بدهید. KAS شما روی زنجیره منتظر می‌ماند تا فروشنده بپذیرد، پیشنهاد را پس بگیرید یا منقضی شود - و می‌توانید اول به فروشنده پیام بدهید.</string>
+    <string name="kl_offer_detail">قیمت خودتان را بگذارید. KAS شما روی زنجیره می‌ماند تا فروشنده بپذیرد، شما پیشنهاد را پس بگیرید یا منقضی شود.</string>
     <string name="kl_listing">آگهی</string>
     <string name="kl_price">قیمت</string>
     <string name="kl_buy_now">خرید فوری</string>
@@ -999,7 +997,7 @@
     <string name="create_wallet_name_title">یک نام برای کیف پول خود بسازید</string>
     <string name="create_wallet_name_detail">این نام فقط روی همین دستگاه ذخیره می‌شود تا کیف پول‌هایتان را از هم تشخیص دهید. هیچ‌کس دیگری هرگز آن را نمی‌بیند.</string>
     <string name="create_wallet_seed_next_warning">صفحه بعد عبارت بازیابی شما را نشان می‌دهد. این تنها راه بازیابی حسابتان است: آن را یادداشت کنید، به صورت امن نگهداری کنید و مطمئن شوید کسی صفحه شما را نمی‌بیند.</string>
-    <string name="choose_seed_phrase_length">طول عبارت بازیابی را انتخاب کنید</string>
+    <string name="choose_seed_phrase_length">۱۲ یا ۲۴ کلمه را انتخاب کنید</string>
     <!-- Create Account, step 3: the seed phrase (iOS CreateWalletSeedStep) -->
     <string name="write_down_your_seed_phrase">عبارت بازیابی خود را یادداشت کنید</string>
     <string name="store_this_in_a_safe_place_anyone_with_these_words">این را در جای امنی نگهداری کنید. هر کسی با این کلمات می‌تواند به حسابتان دسترسی پیدا کند.</string>
@@ -1058,9 +1056,9 @@
     <string name="kn_commit_waiting_busy">شبکه شلوغ است. تعهد شما منتظر یک بلاک است.</string>
     <string name="kn_commit_sent_again">شبکه شلوغ است، بنابراین تعهد دوباره ارسال شد.</string>
     <!-- Onboarding: import length step and the seed phrase explainer (iOS dd0aab1) -->
-    <string name="import_seed_length_detail">عبارت بازیابی که وارد می‌کنید چند کلمه دارد؟</string>
+    <string name="import_seed_length_detail">چند کلمه را وارد می‌کنید؟</string>
     <string name="what_is_this">این چیست؟</string>
-    <string name="what_is_a_seed_phrase">عبارت بازیابی چیست؟</string>
+    <string name="what_is_a_seed_phrase">۱۲ یا ۲۴ کلمه من چیست؟</string>
     <string name="seed_phrase_explainer_master_key">عبارت بازیابی فهرستی از ۱۲ یا ۲۴ کلمه معمولی است که مانند کلید اصلی حساب شما عمل می‌کند. کیف پول، آدرس گفتگو و پیام‌های شما همه از آن می‌آیند.</string>
     <string name="seed_phrase_explainer_anyone">هر کسی این کلمات را داشته باشد می‌تواند همه‌چیز حساب شما را بردارد. اگر آن‌ها را گم کنید و این دستگاه را هم از دست بدهید، هیچ‌کس نمی‌تواند حسابتان را برگرداند، حتی KaPay.</string>
     <string name="seed_phrase_explainer_paper">کلمات را به ترتیب روی کاغذ بنویسید و در جایی امن و خصوصی نگه دارید. هرگز آن‌ها را در وب‌سایتی تایپ نکنید، در گفتگو نفرستید و در اسکرین‌شات یا یادداشت ابری نگه ندارید.</string>
@@ -1076,7 +1074,7 @@
     <string name="cache_web_responses">پاسخ‌های وب</string>
     <string name="cache_web_responses_detail">پیش‌نمایش پیوندها و پاسخ‌های API که در حافظه موقت شبکه سیستم نگه داشته شده‌اند.</string>
     <string name="cache_temporary_files">فایل‌های موقت</string>
-    <string name="cache_temporary_files_detail">فایل‌های موقت ارسال عکس و پیام صوتی. حذف آن‌ها در هر زمان بی‌خطر است.</string>
+    <string name="cache_temporary_files_detail">فایل‌های موقتی که برنامه دیگر به آن‌ها نیاز ندارد. هر زمان بخواهید می‌توانید با خیال راحت حذفشان کنید.</string>
     <!-- Import Account, the words screen (iOS ImportWalletView) -->
     <string name="import_words_continue">ادامه</string>
     <!-- .kachat Renew: choose the period first (iOS 26bd5dc) -->
@@ -1406,4 +1404,7 @@
     <string name="kaspa_node_settings_footer">اسکن خودکار بهترین گره‌های موجود را پیدا کرده و به آن‌ها وصل می‌شود. انتخاب یک گره مشخص فقط به همان وصل می‌شود و به گره دیگری نمی‌رود. روی نمایه‌سازها، دامنه‌ها یا کاوشگر در زبانه‌های دیگر اثری ندارد. برای انتخاب در اینجا، آدرس‌های خود را به دفترچه آدرس IP زیر اضافه کنید.</string>
     <string name="ab_picker_empty_body">مخاطبین را از کیف پول > مخاطبین اضافه کنید.</string>
     <string name="ab_no_contacts">هنوز مخاطبی نیست</string>
+    <string name="where_is_this_seed_phrase_from">۱۲ یا ۲۴ کلمه شما از کجا آمده است؟</string>
+    <string name="different_wallets_store_your_kaspa">کیف پول‌های مختلف Kaspa شما را روی مسیرهای آدرس متفاوتی نگه می‌دارند. انتخاب کنید این کلمات از کجا آمده‌اند تا KaPay دارایی و دامنه‌های شما را پیدا کند.</string>
+    <string name="import_words_enter_recovery_phrase">۱۲ یا ۲۴ کلمه خود را وارد کنید</string>
 </resources>

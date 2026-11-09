@@ -168,7 +168,12 @@ class AddressActivityNotifier @Inject constructor(
 
     // --- Watched sets -----------------------------------------------------------------
 
-    private fun walletAddressOrNull(): String? = try { walletManager.getAddress() } catch (e: Exception) { null }
+    /** The signed-in account's address; null while signed out, so nothing is watched, caught up
+     *  or notified then (iOS guards on `currentWallet`). */
+    private fun walletAddressOrNull(): String? {
+        if (walletManager.isLoggedOut) return null
+        return try { walletManager.getAddress() } catch (e: Exception) { null }
+    }
 
     /** Cold-storage addresses whose account has receive notifications switched off. Still ours
      *  for the self-send check, and still watched for the UI refresh; never notified. */
@@ -286,6 +291,9 @@ class AddressActivityNotifier @Inject constructor(
         // own change far more likely than a receive - e.g. a KaPosts post from this seed.
         val isSelfSend = spendsOwn ?: batchSpentOwn
         if (isHandled(txId, walletAddress)) return
+        // the lookup above can take a while: an answer for an account no longer signed in is
+        // dropped (iOS 2da5f4b)
+        if (walletAddressOrNull() != walletAddress) return
         markHandled(txId, walletAddress)
         if (isSelfSend) {
             Log.i(TAG, "Suppressed self-send $txId (live)")
@@ -553,7 +561,7 @@ class AddressActivityNotifier @Inject constructor(
         val text = "${byAddress.size} of your addresses"
         notificationHelper.showAddressActivity(title = title, text = text, dedupeKey = dedupeKey, kind = kindOf(opened, coldLabels), address = opened)
         notificationCenter.record("wallet-$dedupeKey", "wallet", title, text, System.currentTimeMillis(), opened)
-        Log.i(TAG, "Notified external receive $dedupeKey (${hits.size} outputs)")
+        Log.i(TAG, "Notified external receive ${dedupeKey.take(12)} (${hits.size} outputs)")
     }
 
     private suspend fun postReceive(totalSompi: Long, address: String, coldLabels: Map<String, String>, dedupeKey: String) {
@@ -572,7 +580,8 @@ class AddressActivityNotifier @Inject constructor(
         // Also list it in the Profile notifications bell; the row opens the same address's
         // History (iOS 95e2cba).
         notificationCenter.record("wallet-$dedupeKey", "wallet", "Received ${formatKas(totalSompi)} ${KaspaUnit.symbol}", describe(address, coldLabels), System.currentTimeMillis(), address)
-        Log.i(TAG, "Notified external receive $dedupeKey")
+        // a txid's start, or "bal-" and 8 characters of an address, never more of it
+        Log.i(TAG, "Notified external receive ${dedupeKey.take(12)}")
     }
 
     private suspend fun postBalanceIncreased(address: String, delta: Long, coldLabels: Map<String, String>) {

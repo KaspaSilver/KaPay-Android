@@ -35,9 +35,9 @@ data class NextcloudAccount(
     val server: String,
     val username: String,
     val appPassword: String,
-    /** Where KaChat's "Send from Nextcloud" chat picker starts browsing - null means the files
-     *  root. The wallet has no setting for it (iOS wallet 301ebfb); kept for the dormant chat code. */
-    val startFolder: String? = null,
+    /** Where the contacts and Portfolio files live - null means the default "KaChat" folder at the
+     *  files root, "" the files root itself (iOS 953b255). */
+    val backupFolder: String? = null,
 ) {
     val displayName: String
         get() {
@@ -100,20 +100,26 @@ open class NextcloudException(message: String) : Exception(message)
 /** A non-2xx answer (iOS `NextcloudError.httpError`): [code] lets a caller tell a 404 apart. */
 class NextcloudHttpException(val code: Int) : NextcloudException("Nextcloud returned HTTP $code.")
 
+/** A 401 (iOS `NextcloudError.badCredentials`): it won't fix itself, so automatic work stops
+ *  ([NextcloudService.needsReconnect]). */
+class NextcloudRejectedLoginException : NextcloudException("Nextcloud rejected the username or app password.")
+
 /**
- * The user's own Nextcloud server, for one thing: backing up the Address Book and the Portfolio
- * to the KaChat folder (iOS wallet `NextcloudService`, 301ebfb + 59593af + 5bab351). Connect with
- * an app password; the backup is two plain JSON files there:
- * - [ADDRESS_BOOK_FILE_NAME]: the Address Book export file ([AddressBookManager.exportData], with
- *   photos), so any KaChat app's Address Book import can read it.
- * - [PORTFOLIO_FILE_NAME]: every portfolio with its transactions and fees, plus what was deleted
- *   ([PortfolioBackupFile]), so two devices merge without bringing a deletion back.
- * KaChat's chat backup (`kachat-backup.json`) may share the folder; the wallet never reads,
- * writes or deletes it. A restore falls back to the earlier names, [LEGACY_ADDRESS_BOOK_FILE_NAMES] /
- * [LEGACY_PORTFOLIO_FILE_NAMES]. When and what to upload - Automatic Backup, Back Up Now, Restore,
- * the restore on a fresh connection - is [NextcloudSyncService]'s; this class holds the account,
- * the per-wallet settings and the WebDAV calls. Import / Export in the Address Book and the
- * Portfolio also reach the KaChat folder ([uploadToKaChatFolder], [downloadFile], [listFolder]).
+ * The user's own Nextcloud server, for one thing: backing up Contacts and the Portfolio
+ * (iOS `NextcloudService`, 953b255). Connect with an app password. Two kinds of file:
+ * - [BACKUP_FILE_NAME] in the backup folder: the contacts, encrypted ([BackupCrypto]). It's the same
+ *   file KaChat uses, with the same key, so both apps and all of an account's devices sync through
+ *   it. KaChat's NEXTCLOUD_SYNC.md, "Contacts only", is the contract.
+ * - One file per portfolio in the backup folder, named what the portfolio is named ("Long Term.json"):
+ *   its transactions and fees plus what was deleted ([PortfolioBackupFile]), in the same encrypted v1
+ *   envelope as the contacts ([BackupCrypto]; a plain one from an earlier build is still read). The file
+ *   says which account it belongs to, and another account's is left alone.
+ * The contacts' earlier plain files ([PLAIN_CONTACTS_FILE_NAMES]) and the one Portfolio file the app
+ * used to write ([SINGLE_PORTFOLIO_FILE_NAMES]) are merged in once and never written again. KaChat's
+ * `kachat-backup.json` may share the folder; the wallet never touches it. When and what to upload is
+ * [NextcloudSyncService]'s; this class holds the account, the per-wallet settings and the WebDAV
+ * calls. Import / Export in Contacts and the Portfolio also reach the KaChat folder
+ * ([uploadToKaChatFolder], [downloadFile], [listFolder]).
  *
  * Credentials live in their own `EncryptedSharedPreferences` file (same secure-prefs pattern as
  * [ColdStorageManager]). Everything is scoped to the ACTIVE WALLET ACCOUNT, matching iOS: every
@@ -121,9 +127,6 @@ class NextcloudHttpException(val code: Int) : NextcloudException("Nextcloud retu
  * 8-byte SHA256 hash suffix (iOS's `KeychainService.walletHashSuffix`), and the service follows
  * [WalletManager.activeAddressFlow] so an account switch/logout/delete swaps the whole state and
  * one account's login never leaks into another.
- *
- * The chat-only parts KaChat used (media share links, the chat archive) stay so the dormant chat
- * code still compiles, but nothing in the wallet's Nextcloud flow calls them.
  */
 @Singleton
 class NextcloudService @Inject constructor(
@@ -139,19 +142,43 @@ class NextcloudService @Inject constructor(
         private const val PREF_SERVER = "server"
         private const val PREF_USERNAME = "username"
         private const val PREF_APP_PASSWORD = "app_password"
-        private const val PREF_START_FOLDER = "start_folder"
-        /** Settings > Storage > Nextcloud > "Automatic Backup", per wallet. Default off: a
+        /** [NextcloudAccount.backupFolder]; "" is the files root, absent the default. */
+        private const val PREF_BACKUP_FOLDER = "backup_folder"
+        /** Settings > Storage > Nextcloud > "Automatic Sync", per wallet. Default off: a
          *  connection is not a request to start uploading (iOS `kachat_nextcloud_auto_backup`). */
         private const val PREF_WALLET_AUTO_BACKUP = "wallet_auto_backup"
         /** When this wallet's backup last uploaded (epoch ms). */
         private const val PREF_WALLET_LAST_BACKUP_MS = "wallet_last_backup_ms"
-        /** The Address Book or Portfolio changed since the last successful upload. Persisted, so
-         *  a kill before the upload still backs up on the next background or launch. */
+        /** The Portfolio changed since the last successful upload. Persisted, so a kill before the
+         *  upload still backs up on the next background or launch. */
         private const val PREF_WALLET_PENDING_BACKUP = "wallet_pending_backup"
+        /** When the contacts last synced automatically: Settings' "Last synced", and the floor
+         *  between automatic uploads (iOS `kachat_nextcloud_last_auto_backup`). */
+        private const val PREF_WALLET_LAST_AUTO_SYNC_MS = "wallet_last_auto_sync_ms"
+        /** The contacts' dirty flag: a contact changed after the last successful automatic upload
+         *  (iOS `kachat_nextcloud_pending_sync`). */
+        private const val PREF_WALLET_PENDING_SYNC = "wallet_pending_sync"
+        /** The server ETag of the last contacts file this device merged or wrote, normalized
+         *  (iOS `kachat_nextcloud_last_etag`). */
+        private const val PREF_WALLET_LAST_ETAG = "wallet_last_etag"
+        /** This wallet's earlier plain contacts files have been merged into its contacts. */
+        private const val PREF_WALLET_PLAIN_CONTACTS_MERGED = "wallet_plain_contacts_merged"
+        /** This wallet's earlier single Portfolio file has been merged in. */
+        private const val PREF_WALLET_SINGLE_PORTFOLIO_MERGED = "wallet_single_portfolio_merged"
+        /** This wallet's Portfolio files are all encrypted now: a plain one isn't read any more
+         *  (iOS `kachat_nextcloud_plain_portfolios_retired`). */
+        private const val PREF_WALLET_PLAIN_PORTFOLIOS_RETIRED = "wallet_plain_portfolios_retired"
+        /** Why the contacts last failed to sync (another account's file in the Backup Folder, say),
+         *  until a sync succeeds or the folder changes: Settings shows it. */
+        private const val PREF_WALLET_CONTACTS_SYNC_ERROR = "wallet_contacts_sync_error"
+        /** Global, not per wallet: every login ("server|user", lowercased) whose ownerless single
+         *  Portfolio file has been merged here. It goes to one account, not every one on that login
+         *  (iOS `kachat_nextcloud_single_portfolio_logins`). */
+        private const val PREF_SINGLE_PORTFOLIO_LOGINS = "single_portfolio_logins"
 
-        // KaChat's chat-sync keys, never read any more: kept so a disconnect or account removal
-        // still clears a value an older build stored (iOS keeps KaChat's in `storedKeys` too).
-        private const val PREF_BACKUP_FOLDER = "backup_folder"
+        // Never read any more: kept so a disconnect or account removal still clears a value an
+        // older build stored (iOS keeps KaChat's in `storedKeys` too).
+        private const val PREF_START_FOLDER = "start_folder"
         private const val PREF_AUTO_BACKUP_ENABLED = "auto_backup_enabled"
         private const val PREF_LAST_AUTO_BACKUP_MS = "last_auto_backup_ms"
         private const val PREF_MEDIA_SEND_ENABLED = "media_send_enabled"
@@ -159,9 +186,12 @@ class NextcloudService @Inject constructor(
 
         /** Every per-wallet key base — the unit `disconnect`/`purgeStoredState`/migration act on. */
         private val ALL_PREF_BASES = listOf(
-            PREF_SERVER, PREF_USERNAME, PREF_APP_PASSWORD, PREF_START_FOLDER,
+            PREF_SERVER, PREF_USERNAME, PREF_APP_PASSWORD, PREF_BACKUP_FOLDER,
             PREF_WALLET_AUTO_BACKUP, PREF_WALLET_LAST_BACKUP_MS, PREF_WALLET_PENDING_BACKUP,
-            PREF_BACKUP_FOLDER, PREF_AUTO_BACKUP_ENABLED, PREF_LAST_AUTO_BACKUP_MS,
+            PREF_WALLET_LAST_AUTO_SYNC_MS, PREF_WALLET_PENDING_SYNC, PREF_WALLET_LAST_ETAG,
+            PREF_WALLET_PLAIN_CONTACTS_MERGED, PREF_WALLET_SINGLE_PORTFOLIO_MERGED, PREF_WALLET_CONTACTS_SYNC_ERROR,
+            PREF_WALLET_PLAIN_PORTFOLIOS_RETIRED,
+            PREF_START_FOLDER, PREF_AUTO_BACKUP_ENABLED, PREF_LAST_AUTO_BACKUP_MS,
             PREF_MEDIA_SEND_ENABLED, PREF_TALK_CALLS
         )
 
@@ -173,23 +203,96 @@ class NextcloudService @Inject constructor(
                 .take(8)
                 .joinToString("") { "%02x".format(it) }
 
-        /** The KaChat folder at the files root: the backup, and Address Book / Portfolio exports. */
+        /** The KaChat folder at the files root: the default backup folder, where Contacts and
+         *  Portfolio exports go, and where the earlier plain files are. */
         const val BACKUP_FOLDER_NAME = "KaChat"
-        /** Where KaChat's "Send Media via Nextcloud" uploads land (the dormant chat code only). */
-        const val MEDIA_FOLDER_PATH = "$BACKUP_FOLDER_NAME/Media"
 
-        /** The wallet's own backup files (iOS 5bab351). */
-        const val ADDRESS_BOOK_FILE_NAME = "KaPay Contacts.json"
-        const val PORTFOLIO_FILE_NAME = "KaPay Portfolio.json"
-        /** The names the backup had before: "KaPay Address Book.json" (the Address Book became
-         *  Contacts, 2026-10-28) and the KaChat Wallet names (the app's name until 2026-10-27).
-         *  Read, newest first, when there is no backup under the current name yet; the next
-         *  backup writes the current one (iOS wallet 8118f09). */
-        val LEGACY_ADDRESS_BOOK_FILE_NAMES = listOf("KaPay Address Book.json", "KaChat Wallet Address Book.json")
-        val LEGACY_PORTFOLIO_FILE_NAMES = listOf("KaChat Wallet Portfolio.json")
+        /** The contacts, encrypted, shared with KaChat (iOS 953b255 `backupFileName`). */
+        const val BACKUP_FILE_NAME = "kachat-contacts.json"
+        /** KaChat's old chat backup, which may share the folder. KaPay never touches it. */
+        private const val CHAT_BACKUP_FILE_NAME = "kachat-backup.json"
+        /** The plain files the contacts were kept in before, newest first: "KaPay Contacts.json" until
+         *  2026-11-05, "KaPay Address Book.json" (the Address Book became Contacts, 2026-10-28) and the
+         *  KaChat Wallet name (the app's name until 2026-10-27). Read once, never written. */
+        val PLAIN_CONTACTS_FILE_NAMES = listOf("KaPay Contacts.json", "KaPay Address Book.json", "KaChat Wallet Address Book.json")
+        /** The one file the Portfolio used to be kept in, newest name first. Read once, never written. */
+        val SINGLE_PORTFOLIO_FILE_NAMES = listOf("KaPay Portfolio.json", "KaChat Wallet Portfolio.json")
 
         /** A backup file is read whole; this bounds it (iOS `maxBytes: 50_000_000`). */
         const val BACKUP_MAX_BYTES = 50_000_000L
+
+        /** Pauses between PUT attempts while the file is locked - half a minute in all. */
+        private val LOCK_RETRY_DELAYS_MS = listOf(1_000L, 2_000L, 4_000L, 8_000L, 15_000L)
+        /** Bounds for [discoverExistingBackupFolder] - a connect must not turn into a full crawl. */
+        private const val FOLDER_DISCOVERY_MAX_FOLDERS = 40
+        private const val FOLDER_DISCOVERY_MAX_DEPTH = 3
+
+        private val ETAG_REGEX = Regex("<[^<>]*getetag[^<>]*>([^<]+)</[^<>]*getetag[^<>]*>", RegexOption.IGNORE_CASE)
+
+        /** Pulls the getetag value out of a Depth-0 multistatus without a full XML pass - servers
+         *  vary the namespace prefix (`d:`, `D:`, none), so any tag whose name contains "getetag"
+         *  matches. */
+        internal fun parseEtagFromMultistatus(xml: String): String? {
+            val raw = ETAG_REGEX.find(xml)?.groupValues?.get(1) ?: return null
+            return normalizeEtag(raw.replace("&quot;", "\"").replace("&amp;", "&")).takeIf { it.isNotEmpty() }
+        }
+
+        /** Strips the weak-validator prefix and surrounding quotes so a PUT response header ETag
+         *  and a PROPFIND getetag for the same content compare equal. */
+        internal fun normalizeEtag(raw: String): String = raw.trim().removePrefix("W/").trim('"')
+
+        /** Keeps stored filenames WebDAV/URL-safe (iOS sanitizedFilename): letters, marks and digits
+         *  of any script stay (CharacterSet.alphanumerics), plus "._-" and, with [keepSpaces], the
+         *  space; everything else becomes "_". */
+        internal fun sanitizedFilename(name: String, keepSpaces: Boolean = false): String {
+            val disallowed = if (keepSpaces) Regex("[^\\p{L}\\p{M}\\p{N}._ -]") else Regex("[^\\p{L}\\p{M}\\p{N}._-]")
+            return name.replace(disallowed, "_").ifEmpty { "file" }
+        }
+
+        /** Contacts and chat files, which can be large and are never portfolios, and anything that
+         *  isn't JSON or is too large to read whole. */
+        internal fun isPortfolioFileCandidate(name: String, isDirectory: Boolean = false, size: Long? = null): Boolean {
+            val lower = name.lowercase()
+            if (isDirectory || !lower.endsWith(".json") || (size ?: 0L) > BACKUP_MAX_BYTES) return false
+            val notPortfolios = (listOf(BACKUP_FILE_NAME, CHAT_BACKUP_FILE_NAME) + PLAIN_CONTACTS_FILE_NAMES).map { it.lowercase() }
+            return lower !in notPortfolios && !lower.startsWith("kapay contacts ")
+        }
+
+        /**
+         * Each portfolio's file name: its own name, with a number only where another file already has
+         * that name. The same portfolios get the same names on every device (iOS `portfolioFileNames`).
+         */
+        internal fun portfolioFileNames(portfolios: List<SyncPortfolio>, taken: Set<String>): Map<String, String> {
+            val used = taken.toMutableSet()
+            val names = HashMap<String, String>()
+            for (portfolio in portfolios.sortedWith(compareBy<SyncPortfolio> { it.createdAtMillis }.thenBy { it.id })) {
+                val trimmed = portfolio.name.trim()
+                // 60 characters as a person counts them (never half an emoji), as Swift's prefix(60).
+                val breaks = java.text.BreakIterator.getCharacterInstance().apply { setText(trimmed) }
+                var end = 0
+                var count = 0
+                while (count < 60) {
+                    val next = breaks.next()
+                    if (next == java.text.BreakIterator.DONE) { end = trimmed.length; break }
+                    end = next
+                    count++
+                }
+                var base = if (trimmed.isEmpty()) "Portfolio" else sanitizedFilename(trimmed.substring(0, end), keepSpaces = true)
+                // A name no number can make allowed ("KaPay Contacts ...") uses "Portfolio", as KaChat
+                // Desktop does, so both apps give it the same file; numbering it alone never ended
+                // (iOS 4523157).
+                if (!isPortfolioFileCandidate("$base 2.json")) base = "Portfolio"
+                var candidate = "$base.json"
+                var number = 2
+                while (candidate.lowercase() in used || !isPortfolioFileCandidate(candidate)) {
+                    candidate = "$base $number.json"
+                    number++
+                }
+                used += candidate.lowercase()
+                names[portfolio.id] = candidate
+            }
+            return names
+        }
 
         /** Normalizes user input ("mycloud.duckdns.org", trailing slashes, an accidental
          *  "/index.php" suffix) into a clean base URL, defaulting to https. Null if it doesn't
@@ -239,13 +342,43 @@ class NextcloudService @Inject constructor(
     private val _account = MutableStateFlow<NextcloudAccount?>(null)
     val account: StateFlow<NextcloudAccount?> = _account.asStateFlow()
 
-    /** Settings > Storage > Nextcloud > "Automatic Backup", per wallet account. Default off. */
+    /** Settings > Storage > Nextcloud > "Automatic Sync", per wallet account. Default off. */
     private val _autoBackupEnabled = MutableStateFlow(false)
     val autoBackupEnabled: StateFlow<Boolean> = _autoBackupEnabled.asStateFlow()
 
     /** When the active wallet's backup last uploaded (epoch ms), null = never. */
     private val _lastBackupMs = MutableStateFlow<Long?>(null)
     val lastBackupMs: StateFlow<Long?> = _lastBackupMs.asStateFlow()
+
+    /** When the active wallet's contacts last synced automatically (epoch ms), null = never. */
+    private val _lastAutoSyncMs = MutableStateFlow<Long?>(null)
+    val lastAutoSyncMs: StateFlow<Long?> = _lastAutoSyncMs.asStateFlow()
+
+    /** Nextcloud refused this login (a revoked app password, say). Automatic Sync stops asking until
+     *  the next launch or connection, and Settings says what to do (iOS 953b255). */
+    private val _needsReconnect = MutableStateFlow(false)
+    val needsReconnect: StateFlow<Boolean> = _needsReconnect.asStateFlow()
+
+    /** Why the active wallet's contacts last failed to sync, kept until a sync succeeds or the
+     *  Backup Folder changes; null when the last one went through. Settings shows it. */
+    private val _contactsSyncError = MutableStateFlow<String?>(null)
+    val contactsSyncError: StateFlow<String?> = _contactsSyncError.asStateFlow()
+
+    /** [activeWalletAddress] as a flow, updated once the wallet's whole state has loaded. */
+    private val _activeWallet = MutableStateFlow<String?>(null)
+    val activeWallet: StateFlow<String?> = _activeWallet.asStateFlow()
+
+    /** The Portfolio files last read, so an unchanged file isn't downloaded again. A null backup is
+     *  a file that isn't one of this account's portfolios; [damaged] is this account's envelope that
+     *  won't open. Keyed by wallet and path: what a file reads as depends on the account's key. */
+    private data class CachedPortfolioFile(
+        val modifiedMs: Long?,
+        val size: Long?,
+        val backup: PortfolioBackupFile.Decoded?,
+        val encrypted: Boolean = false,
+        val damaged: Boolean = false,
+    )
+    private val portfolioFileCache = java.util.concurrent.ConcurrentHashMap<String, CachedPortfolioFile>()
 
     /** The active wallet's address — every credential/settings read and write is scoped to it.
      *  Null (signed out / no wallet yet / testnet) presents as disconnected and persists nothing. */
@@ -283,9 +416,9 @@ class NextcloudService @Inject constructor(
      */
     val isOffForTestnet: Boolean get() = com.kachat.app.util.KaspaNetwork.isTestnet
 
-    /** Where the backup and the Address Book / Portfolio exports go: always the KaChat folder at
-     *  the files root (iOS `backupFolderName`; there is no folder choice in the wallet). */
-    val backupFolderPath: String get() = BACKUP_FOLDER_NAME
+    /** The folder the contacts and Portfolio files are in: the one chosen or found ("" is the files
+     *  root), or "KaChat" by default (iOS 953b255). Exports stay in the KaChat folder. */
+    val backupFolderPath: String get() = _account.value?.backupFolder ?: BACKUP_FOLDER_NAME
 
     // -------------------------------------------------------------------------
     // Wallet scoping
@@ -307,6 +440,8 @@ class NextcloudService @Inject constructor(
         val walletAddress = if (isOffForTestnet) null else requestedAddress
         if (!force && walletAddress == currentWalletAddress) return
 
+        portfolioFileCache.clear()
+        _needsReconnect.value = false
         currentWalletAddress = walletAddress
         currentSuffix = walletAddress?.let { walletHashSuffix(it) }
 
@@ -314,6 +449,9 @@ class NextcloudService @Inject constructor(
             _account.value = null
             _autoBackupEnabled.value = false
             _lastBackupMs.value = null
+            _lastAutoSyncMs.value = null
+            _contactsSyncError.value = null
+            _activeWallet.value = null
             return
         }
 
@@ -323,6 +461,9 @@ class NextcloudService @Inject constructor(
         _autoBackupEnabled.value = _account.value != null &&
             (scopedKey(PREF_WALLET_AUTO_BACKUP)?.let { prefs.getBoolean(it, false) } ?: false)
         _lastBackupMs.value = scopedKey(PREF_WALLET_LAST_BACKUP_MS)?.let { prefs.getLong(it, 0L) }?.takeIf { it > 0 }
+        _lastAutoSyncMs.value = scopedKey(PREF_WALLET_LAST_AUTO_SYNC_MS)?.let { prefs.getLong(it, 0L) }?.takeIf { it > 0 }
+        _contactsSyncError.value = scopedKey(PREF_WALLET_CONTACTS_SYNC_ERROR)?.let { prefs.getString(it, null) }
+        _activeWallet.value = walletAddress
     }
 
     /**
@@ -345,7 +486,7 @@ class NextcloudService @Inject constructor(
             editor.putString(scopedKey(PREF_SERVER, suffix), legacyServer)
             editor.putString(scopedKey(PREF_USERNAME, suffix), legacyUsername)
             editor.putString(scopedKey(PREF_APP_PASSWORD, suffix), legacyPassword)
-            prefs.getString(PREF_START_FOLDER, null)?.let { editor.putString(scopedKey(PREF_START_FOLDER, suffix), it) }
+            prefs.getString(PREF_BACKUP_FOLDER, null)?.let { editor.putString(scopedKey(PREF_BACKUP_FOLDER, suffix), it) }
         }
         for (base in ALL_PREF_BASES) editor.remove(base)
         editor.apply()
@@ -366,6 +507,10 @@ class NextcloudService @Inject constructor(
             _account.value = null
             _autoBackupEnabled.value = false
             _lastBackupMs.value = null
+            _lastAutoSyncMs.value = null
+            _contactsSyncError.value = null
+            _needsReconnect.value = false
+            portfolioFileCache.clear()
         }
     }
 
@@ -377,22 +522,47 @@ class NextcloudService @Inject constructor(
             server = server,
             username = username,
             appPassword = appPassword,
-            startFolder = scopedKey(PREF_START_FOLDER)?.let { prefs.getString(it, null) },
+            backupFolder = scopedKey(PREF_BACKUP_FOLDER)?.let { prefs.getString(it, null) },
         )
     }
 
-    private fun persistAccount(account: NextcloudAccount) {
-        val suffix = currentSuffix ?: return
+    /** Saves [account] as [walletAddress]'s login - the wallet an operation snapshotted at its
+     *  start, never whichever is active when the server answers. Shown only while it is active. */
+    private fun persistAccount(account: NextcloudAccount, walletAddress: String) {
+        val suffix = walletHashSuffix(walletAddress)
         prefs.edit()
             .putString(scopedKey(PREF_SERVER, suffix), account.server)
             .putString(scopedKey(PREF_USERNAME, suffix), account.username)
             .putString(scopedKey(PREF_APP_PASSWORD, suffix), account.appPassword)
             .apply {
-                if (account.startFolder != null) putString(scopedKey(PREF_START_FOLDER, suffix), account.startFolder)
-                else remove(scopedKey(PREF_START_FOLDER, suffix))
+                if (account.backupFolder != null) putString(scopedKey(PREF_BACKUP_FOLDER, suffix), account.backupFolder)
+                else remove(scopedKey(PREF_BACKUP_FOLDER, suffix))
             }
             .apply()
-        _account.value = account
+        if (currentWalletAddress == walletAddress) _account.value = account
+    }
+
+    /** The login stored under [suffix], if any. */
+    private fun storedAccount(suffix: String): NextcloudAccount? {
+        val server = prefs.getString(scopedKey(PREF_SERVER, suffix), null) ?: return null
+        val username = prefs.getString(scopedKey(PREF_USERNAME, suffix), null) ?: return null
+        val appPassword = prefs.getString(scopedKey(PREF_APP_PASSWORD, suffix), null) ?: return null
+        return NextcloudAccount(server, username, appPassword, prefs.getString(scopedKey(PREF_BACKUP_FOLDER, suffix), null))
+    }
+
+    /** Another account stored on this device (any suffix but [excludingSuffixes]) signs in with
+     *  [account]'s server, user and app password: revoking it would sign that one out too. */
+    private fun isAppPasswordUsedElsewhere(account: NextcloudAccount, excludingSuffixes: Set<String>): Boolean {
+        val prefix = "${PREF_APP_PASSWORD}_"
+        return prefs.all.keys.asSequence()
+            .filter { it.startsWith(prefix) }
+            .map { it.removePrefix(prefix) }
+            .filter { it !in excludingSuffixes }
+            .mapNotNull { storedAccount(it) }
+            .any {
+                it.server.trimEnd('/').equals(account.server.trimEnd('/'), ignoreCase = true) &&
+                    it.username == account.username && it.appPassword == account.appPassword
+            }
     }
 
     // -------------------------------------------------------------------------
@@ -401,12 +571,16 @@ class NextcloudService @Inject constructor(
 
     /**
      * Verifies the credentials against the OCS user endpoint (the cheapest authenticated call),
-     * then persists them. Throws with a user-facing message — a 401 says exactly what's wrong.
-     * The restore a fresh connection runs once by itself is [NextcloudSyncService.connect]'s.
+     * then persists them for the wallet active when it started, which it returns (and throws,
+     * saving nothing, if another account became active meanwhile). Throws with a user-facing
+     * message — a 401 says exactly what's wrong. The merge a fresh connection runs once by itself
+     * is [NextcloudSyncService.connectAsync]'s.
      */
-    suspend fun connect(serverInput: String, username: String, appPassword: String) {
+    suspend fun connect(serverInput: String, username: String, appPassword: String): String {
         if (isOffForTestnet) throw NextcloudException(context.getString(com.kachat.app.R.string.nextcloud_off_on_testnet))
-        if (currentWalletAddress == null) throw NextcloudException("Sign in to an account before connecting Nextcloud.")
+        // The login is saved to the account Connect was tapped in, never one switched to meanwhile.
+        val walletAtStart = currentWalletAddress
+            ?: throw NextcloudException("Sign in to an account before connecting Nextcloud.")
         if (serverInput.trim().lowercase().startsWith("http://")) {
             throw NextcloudException("Use https. Unencrypted connections are not supported.")
         }
@@ -425,7 +599,7 @@ class NextcloudService @Inject constructor(
                 .header("Accept", "application/json")
                 .build()
             client.newCall(request).execute().use { response ->
-                if (response.code == 401) throw NextcloudException(BAD_CREDENTIALS)
+                if (response.code == 401) throw NextcloudRejectedLoginException()
                 if (!response.isSuccessful) throw NextcloudHttpException(response.code)
                 val body = response.body?.string() ?: throw NextcloudException(MALFORMED)
                 // ocs.data existing at all is the success signal; its contents aren't needed.
@@ -433,21 +607,30 @@ class NextcloudService @Inject constructor(
                     ?: throw NextcloudException(MALFORMED)
             }
         }
-        persistAccount(candidate)
-        // A connection is not a request to start uploading: Automatic Backup stays as it was
+        if (currentWalletAddress != walletAtStart) {
+            throw NextcloudException("The account changed while connecting. Nothing was saved; connect again from this account.")
+        }
+        persistAccount(candidate, walletAtStart)
+        _needsReconnect.value = false
+        // A connection is not a request to start uploading: Automatic Sync stays as it was
         // stored (off unless this wallet turned it on before).
-        _autoBackupEnabled.value = scopedKey(PREF_WALLET_AUTO_BACKUP)?.let { prefs.getBoolean(it, false) } ?: false
+        _autoBackupEnabled.value = prefs.getBoolean(walletKey(PREF_WALLET_AUTO_BACKUP, walletAtStart), false)
+        _lastAutoSyncMs.value = prefs.getLong(walletKey(PREF_WALLET_LAST_AUTO_SYNC_MS, walletAtStart), 0L).takeIf { it > 0 }
+        return walletAtStart
     }
 
     /**
      * Forgets this wallet's Nextcloud login and settings. The app password the user made for
      * KaPay is revoked on the server first, while the credentials still exist to authenticate the
      * request - best effort, the local copy goes whatever the server says (iOS `disconnect`).
-     * The backup itself stays on the server.
+     * The files themselves stay on the server.
      */
     fun disconnect() {
         _account.value?.let { account ->
-            serviceScope.launch(Dispatchers.IO) { revokeAppPassword(account) }
+            // Not while another account on this device still signs in with the same app password.
+            val shared = isAppPasswordUsedElsewhere(account, setOfNotNull(currentSuffix))
+            if (shared) Log.i(TAG, "Not revoking the app password: another account here uses it")
+            else serviceScope.launch(Dispatchers.IO) { revokeAppPassword(account) }
         }
         val editor = prefs.edit()
         // Only the active wallet's entries — other accounts' logins stay untouched.
@@ -458,9 +641,28 @@ class NextcloudService @Inject constructor(
         // disconnect can never appear to "come back" via migration.
         for (base in ALL_PREF_BASES) editor.remove(base)
         editor.apply()
+        portfolioFileCache.clear()
+        _needsReconnect.value = false
         _account.value = null
         _autoBackupEnabled.value = false
         _lastBackupMs.value = null
+        _lastAutoSyncMs.value = null
+        _contactsSyncError.value = null
+    }
+
+    /**
+     * Removing an account: the app password its stored login holds, revoked while the login still
+     * exists to authenticate with, signed in or not (iOS `revokeStoredAppPassword`). [removing] is
+     * every address of the account going (both networks'); another account here that still signs
+     * in with the same server, user and app password keeps it. Best effort.
+     */
+    suspend fun revokeStoredAppPassword(walletAddress: String, removing: Collection<String> = listOf(walletAddress)) {
+        val account = storedAccount(walletHashSuffix(walletAddress)) ?: return
+        if (isAppPasswordUsedElsewhere(account, removing.map { walletHashSuffix(it) }.toSet() + walletHashSuffix(walletAddress))) {
+            Log.i(TAG, "Not revoking the app password: another account here uses it")
+            return
+        }
+        withContext(Dispatchers.IO) { revokeAppPassword(account) }
     }
 
     /** Revokes [account]'s app password on its server (iOS `revokeAppPassword`), so a
@@ -473,7 +675,8 @@ class NextcloudService @Inject constructor(
                 .header("Authorization", basicAuth(account))
                 .header("OCS-APIRequest", "true")
                 .build()
-            client.newCall(request).execute().use { response ->
+            // best effort, and an account removal waits on it (iOS 2da5f4b)
+            client.newBuilder().callTimeout(8, TimeUnit.SECONDS).build().newCall(request).execute().use { response ->
                 Log.i(TAG, "App password revoke answered HTTP ${response.code}")
             }
         } catch (e: Exception) {
@@ -481,26 +684,115 @@ class NextcloudService @Inject constructor(
         }
     }
 
-    /** Persists the chat picker's start folder (null/"" = files root). The wallet's settings
-     *  never offer it; kept for the dormant chat code. */
-    fun setStartFolder(path: String?) {
-        val current = _account.value ?: return
-        persistAccount(current.copy(startFolder = path?.trim()?.takeIf { it.isNotEmpty() }))
+    /** A 401: automatic work stops until the next launch or connection (iOS `noteRejectedLogin`). */
+    fun markNeedsReconnect() {
+        _needsReconnect.value = true
     }
 
     // -------------------------------------------------------------------------
-    // Automatic Backup settings (per wallet; NextcloudSyncService acts on them)
+    // Backup folder
     // -------------------------------------------------------------------------
 
-    /** Stores the Automatic Backup toggle. [NextcloudSyncService.setAutoBackupEnabled] is the
-     *  setter the screen uses: it also schedules or cancels the upload. */
+    /** Persists the backup folder ("" = the files root, null = the default "KaChat" folder). */
+    fun setBackupFolder(path: String?, forWallet: String? = null) {
+        val wallet = currentWalletAddress ?: return
+        // a folder found for one account is never saved to another switched to meanwhile
+        if (forWallet != null && forWallet != wallet) return
+        val current = storedAccount(walletHashSuffix(wallet)) ?: return
+        persistAccount(current.copy(backupFolder = path?.trim()), wallet)
+        // A different file may be there, and this one may not be; nor may the last error.
+        setLastKnownEtag(null, wallet)
+        setContactsSyncError(null, wallet)
+    }
+
+    /**
+     * Finds the folder this account already keeps its contacts file in, so a fresh connection
+     * doesn't start a second one beside it. Prefers a folder that actually holds the file; one
+     * merely NAMED KaChat is the fallback. Breadth-first and bounded (iOS 953b255).
+     *
+     * Only [walletAddress]'s own contacts file counts: its envelope carries this account's
+     * `walletHint` (or, with no hint, opens with this account's key). A folder holding another
+     * account's file - a second seed on the same Nextcloud login - is passed over, and not taken
+     * as the named fallback either, so this account never adopts a file it can't sync.
+     */
+    suspend fun discoverExistingBackupFolder(walletAddress: String): String? {
+        val account = storedAccount(walletHashSuffix(walletAddress)) ?: return null
+        val hint = BackupCrypto.walletHint(walletAddress)
+        val queue = ArrayDeque<String>().apply { add("") }
+        var visited = 0
+        var namedCandidate: String? = null
+
+        while (queue.isNotEmpty() && visited < FOLDER_DISCOVERY_MAX_FOLDERS) {
+            val path = queue.removeFirst()
+            visited++
+            val entries = try {
+                listFolder(account, path)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                continue
+            }
+
+            // A folder holding this account's file IS the answer - stop looking.
+            val contactsFile = entries.firstOrNull { !it.isDirectory && it.name == BACKUP_FILE_NAME }
+            val holdsOthers = contactsFile != null && !isOwnContactsFile(account, contactsFile, walletAddress, hint)
+            if (contactsFile != null && !holdsOthers) return path
+            for (entry in entries.filter { it.isDirectory }) {
+                if (namedCandidate == null && entry.name.equals(BACKUP_FOLDER_NAME, ignoreCase = true) &&
+                    !folderHoldsOthersContacts(account, entry.path, walletAddress, hint)
+                ) {
+                    namedCandidate = entry.path
+                }
+                if (entry.path.split("/").count { it.isNotEmpty() } < FOLDER_DISCOVERY_MAX_DEPTH) {
+                    queue.add(entry.path)
+                }
+            }
+        }
+        return namedCandidate
+    }
+
+    /** [folder] holds a contacts file that isn't [walletAddress]'s. */
+    private suspend fun folderHoldsOthersContacts(account: NextcloudAccount, folder: String, walletAddress: String, hint: String): Boolean {
+        val file = try {
+            listFolder(account, folder).firstOrNull { !it.isDirectory && it.name == BACKUP_FILE_NAME }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        } ?: return false
+        return !isOwnContactsFile(account, file, walletAddress, hint)
+    }
+
+    /** A contacts file is [walletAddress]'s when its envelope carries this account's `walletHint`,
+     *  or carries none and opens with this account's key. Anything that can't be read isn't. */
+    private suspend fun isOwnContactsFile(account: NextcloudAccount, file: NextcloudFile, walletAddress: String, hint: String): Boolean {
+        val text = try {
+            String(downloadFile(account, file.path, BACKUP_MAX_BYTES), Charsets.UTF_8)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return false
+        }
+        if (!BackupCrypto.isEnvelope(text)) return false
+        val fileHint = BackupCrypto.envelopeWalletHint(text)
+        if (fileHint != null) return fileHint.equals(hint, ignoreCase = true)
+        val key = withContext(Dispatchers.IO) { portfolioKeyFor(walletAddress) } ?: return false
+        return withContext(Dispatchers.IO) { runCatching { BackupCrypto.decrypt(text, key) }.isSuccess }
+    }
+
+    // -------------------------------------------------------------------------
+    // Automatic Sync settings (per wallet; NextcloudSyncService acts on them)
+    // -------------------------------------------------------------------------
+
+    /** Stores the Automatic Sync toggle. [NextcloudSyncService.setAutoBackupEnabled] is the
+     *  setter the screen uses: it also schedules or cancels the uploads. */
     fun setAutoBackupEnabled(enabled: Boolean) {
         val key = scopedKey(PREF_WALLET_AUTO_BACKUP) ?: return
         prefs.edit().putBoolean(key, enabled).apply()
         _autoBackupEnabled.value = enabled
     }
 
-    /** Whether the active wallet owes the server an upload. */
+    /** Whether the active wallet owes the server a Portfolio upload. */
     val isBackupPending: Boolean
         get() = scopedKey(PREF_WALLET_PENDING_BACKUP)?.let { prefs.getBoolean(it, false) } ?: false
 
@@ -509,14 +801,334 @@ class NextcloudService @Inject constructor(
         prefs.edit().putBoolean(key, pending).apply()
     }
 
-    /** A backup finished for the active wallet: nothing is owed, and it is stamped now. */
-    fun recordBackupFinished() {
+    /** A backup finished for the active wallet: it is stamped now, and the login clearly works
+     *  (iOS `stampBackup`). */
+    fun stampBackup() {
         val now = System.currentTimeMillis()
-        val editor = prefs.edit()
-        scopedKey(PREF_WALLET_PENDING_BACKUP)?.let { editor.putBoolean(it, false) }
-        scopedKey(PREF_WALLET_LAST_BACKUP_MS)?.let { editor.putLong(it, now) }
-        editor.apply()
+        _needsReconnect.value = false
+        scopedKey(PREF_WALLET_LAST_BACKUP_MS)?.let { prefs.edit().putLong(it, now).apply() }
         _lastBackupMs.value = now
+    }
+
+    /** A snapshotted wallet's key for [base] (never the current one - the wallet may have switched
+     *  mid-flight). */
+    private fun walletKey(base: String, walletAddress: String) = scopedKey(base, walletHashSuffix(walletAddress))
+
+    /** [walletAddress]'s contacts are owed an automatic upload. */
+    fun isContactsDirty(walletAddress: String): Boolean =
+        prefs.getBoolean(walletKey(PREF_WALLET_PENDING_SYNC, walletAddress), false)
+
+    fun setContactsDirty(dirty: Boolean, walletAddress: String) {
+        prefs.edit().putBoolean(walletKey(PREF_WALLET_PENDING_SYNC, walletAddress), dirty).apply()
+    }
+
+    /** An automatic contacts sync finished for [walletAddress]. */
+    fun recordAutoSync(walletAddress: String) {
+        val now = System.currentTimeMillis()
+        prefs.edit().putLong(walletKey(PREF_WALLET_LAST_AUTO_SYNC_MS, walletAddress), now).apply()
+        if (currentWalletAddress == walletAddress) _lastAutoSyncMs.value = now
+    }
+
+    /** The ETag of the last contacts file [walletAddress] merged or wrote. Persisted per wallet, so
+     *  a change that lands while the app is in the background is caught by the first poll after it
+     *  comes back, and a device never downloads its own write. */
+    fun lastKnownEtag(walletAddress: String): String? =
+        prefs.getString(walletKey(PREF_WALLET_LAST_ETAG, walletAddress), null)
+
+    fun setLastKnownEtag(etag: String?, walletAddress: String) {
+        val editor = prefs.edit()
+        val key = walletKey(PREF_WALLET_LAST_ETAG, walletAddress)
+        if (etag != null) editor.putString(key, etag) else editor.remove(key)
+        editor.apply()
+    }
+
+    /** Records why [walletAddress]'s contacts failed to sync (null: the last sync went through). */
+    fun setContactsSyncError(message: String?, walletAddress: String) {
+        val key = walletKey(PREF_WALLET_CONTACTS_SYNC_ERROR, walletAddress)
+        val editor = prefs.edit()
+        if (message != null) editor.putString(key, message) else editor.remove(key)
+        editor.apply()
+        if (currentWalletAddress == walletAddress) _contactsSyncError.value = message
+    }
+
+    /** The active wallet's earlier plain contacts files are in (true while signed out). */
+    val plainContactsMerged: Boolean
+        get() = scopedKey(PREF_WALLET_PLAIN_CONTACTS_MERGED)?.let { prefs.getBoolean(it, false) } ?: true
+
+    fun markPlainContactsMerged(walletAddress: String) {
+        prefs.edit().putBoolean(walletKey(PREF_WALLET_PLAIN_CONTACTS_MERGED, walletAddress), true).apply()
+    }
+
+    /** [walletAddress]'s earlier single Portfolio file is in. */
+    fun isSinglePortfolioMerged(walletAddress: String): Boolean =
+        prefs.getBoolean(walletKey(PREF_WALLET_SINGLE_PORTFOLIO_MERGED, walletAddress), false)
+
+    fun markSinglePortfolioMerged(walletAddress: String) {
+        prefs.edit().putBoolean(walletKey(PREF_WALLET_SINGLE_PORTFOLIO_MERGED, walletAddress), true).apply()
+    }
+
+    /** [walletAddress]'s Portfolio files have all been written encrypted by a full backup, so a plain
+     *  one isn't read any more (iOS `plainPortfoliosRetiredKey`). */
+    fun isPlainPortfoliosRetired(walletAddress: String): Boolean =
+        prefs.getBoolean(walletKey(PREF_WALLET_PLAIN_PORTFOLIOS_RETIRED, walletAddress), false)
+
+    fun markPlainPortfoliosRetired(walletAddress: String) {
+        prefs.edit().putBoolean(walletKey(PREF_WALLET_PLAIN_PORTFOLIOS_RETIRED, walletAddress), true).apply()
+    }
+
+    private fun loginId(account: NextcloudAccount) = "${account.server.trimEnd('/').lowercase()}|${account.username.lowercase()}"
+
+    /** An account on this device has already taken [account]'s login's ownerless single Portfolio
+     *  file (iOS `singlePortfolioLoginsKey`): a second account on the same login doesn't. */
+    fun isSinglePortfolioLoginClaimed(account: NextcloudAccount): Boolean =
+        loginId(account) in prefs.getStringSet(PREF_SINGLE_PORTFOLIO_LOGINS, null).orEmpty()
+
+    fun claimSinglePortfolioLogin(account: NextcloudAccount) {
+        val logins = prefs.getStringSet(PREF_SINGLE_PORTFOLIO_LOGINS, null).orEmpty() + loginId(account)
+        prefs.edit().putStringSet(PREF_SINGLE_PORTFOLIO_LOGINS, logins).apply()
+    }
+
+    // -------------------------------------------------------------------------
+    // The contacts file (WebDAV PUT/GET of one encrypted file; iOS 953b255)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Uploads the contacts to `<backup folder>/kachat-contacts.json`, creating the folder chain
+     * first. Overwrites in place: every caller goes through [NextcloudSyncService.runContactsBackup]
+     * and the body is a merge, never a replacement. Returns the uploaded file's ETag when the server
+     * sent one (`OC-ETag` first - Nextcloud's canonical header - then `ETag`), normalized.
+     */
+    suspend fun uploadBackup(data: ByteArray): String? = withContext(Dispatchers.IO) {
+        val account = requireAccount()
+        val folder = backupFolderPath
+        ensureFolder(account, folder)
+        val put = Request.Builder()
+            .url(davUrl(account, "$folder/$BACKUP_FILE_NAME"))
+            .put(data.toRequestBody("application/json".toMediaType()))
+            .header("Authorization", basicAuth(account))
+            .build()
+        var attempt = 0
+        while (true) {
+            client.newCall(put).execute().use { response ->
+                if (response.code == 401) throw NextcloudRejectedLoginException()
+                if (response.code != 423) {
+                    if (!response.isSuccessful) throw NextcloudHttpException(response.code)
+                    val raw = response.header("OC-ETag") ?: response.header("ETag")
+                    return@withContext raw?.let { normalizeEtag(it) }?.takeIf { it.isNotEmpty() }
+                }
+            }
+            // Nextcloud's file lock: another device is reading or writing the file, and a lock held
+            // by a live request clears the moment that request ends. Wait it out a few times before
+            // calling it stale.
+            if (attempt >= LOCK_RETRY_DELAYS_MS.size) {
+                throw NextcloudException(
+                    "Nextcloud has the backup file locked (HTTP 423): another device or sync is reading " +
+                        "or writing it right now. Try again in a minute. If it keeps happening, the lock is " +
+                        "stale on the server - clear it with occ (maintenance mode on, empty the file locks, off)."
+                )
+            }
+            Log.i(TAG, "Backup file locked (HTTP 423), retrying in ${LOCK_RETRY_DELAYS_MS[attempt]}ms")
+            kotlinx.coroutines.delay(LOCK_RETRY_DELAYS_MS[attempt])
+            attempt++
+        }
+        @Suppress("UNREACHABLE_CODE")
+        null
+    }
+
+    /**
+     * The contacts file's bytes, or null when there is no file yet (a 404 on it or its folder). Every
+     * other failure throws before any caller could write: a 2xx HTML body is a reverse-proxy, login
+     * or maintenance page standing in for the server, and a download short of the advertised length
+     * is a transfer problem. A short file must never read as a damaged one and be overwritten.
+     */
+    suspend fun downloadBackup(): String? = withContext(Dispatchers.IO) {
+        val account = requireAccount()
+        val request = Request.Builder()
+            .url(davUrl(account, "$backupFolderPath/$BACKUP_FILE_NAME"))
+            .header("Authorization", basicAuth(account))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (response.code == 401) throw NextcloudRejectedLoginException()
+            if (response.code == 404) return@withContext null
+            if (!response.isSuccessful) throw NextcloudHttpException(response.code)
+            if ("html" in response.header("Content-Type").orEmpty().lowercase()) throw NextcloudException(MALFORMED)
+            val body = response.body ?: throw NextcloudException(MALFORMED)
+            val expected = body.contentLength().takeIf { it > 0 }
+            // Read whole, so bounded like every other backup file (iOS `maxBytes: 50_000_000`).
+            val tooLarge = "The backup file on Nextcloud is too large to read."
+            if (expected != null && expected > BACKUP_MAX_BYTES) throw NextcloudException(tooLarge)
+            val out = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(64 * 1024)
+            body.byteStream().use { input ->
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    out.write(buffer, 0, read)
+                    if (out.size() > BACKUP_MAX_BYTES) throw NextcloudException(tooLarge)
+                }
+            }
+            if (out.size() == 0) throw NextcloudHttpException(response.code)
+            // A connection closed gracefully mid-body just ends the stream, so short of the
+            // advertised length has to be caught here.
+            if (expected != null && out.size().toLong() < expected) {
+                throw NextcloudException(
+                    "The backup download stopped early (${out.size()} of $expected bytes). " +
+                        "Nothing on the server was changed, so trying again is safe."
+                )
+            }
+            out.toString("UTF-8")
+        }
+    }
+
+    /** The contacts file's current ETag via a Depth-0 PROPFIND requesting only `getetag`. null = no
+     *  file yet (404); throws on any other failure, so the watcher can back off. */
+    suspend fun fetchBackupEtag(): String? = withContext(Dispatchers.IO) {
+        val account = requireAccount()
+        val body = """
+            <?xml version="1.0"?>
+            <d:propfind xmlns:d="DAV:"><d:prop><d:getetag/></d:prop></d:propfind>
+        """.trimIndent().toRequestBody("application/xml".toMediaType())
+        val request = Request.Builder()
+            .url(davUrl(account, "$backupFolderPath/$BACKUP_FILE_NAME"))
+            .method("PROPFIND", body)
+            .header("Depth", "0")
+            .header("Authorization", basicAuth(account))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (response.code == 401) throw NextcloudRejectedLoginException()
+            if (response.code == 404) return@withContext null
+            if (response.code != 207) throw NextcloudHttpException(response.code)
+            val xml = response.body?.string() ?: throw NextcloudException(MALFORMED)
+            parseEtagFromMultistatus(xml) ?: throw NextcloudException(MALFORMED)
+        }
+    }
+
+    /** The contacts file's server-side metadata (null = no file yet, or unreadable). */
+    suspend fun contactsFileInfo(): NextcloudFile? {
+        val listing = try {
+            listFolder(backupFolderPath)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return null
+        }
+        return listing.firstOrNull { it.name == BACKUP_FILE_NAME && !it.isDirectory }
+    }
+
+    // -------------------------------------------------------------------------
+    // The Portfolio files (iOS 953b255)
+    // -------------------------------------------------------------------------
+
+    /** One account's Portfolio file found in the backup folder. [encrypted] false: a plain file from
+     *  an earlier build, rewritten encrypted at the next backup even when nothing in it changed. */
+    data class ServerPortfolioFile(val file: NextcloudFile, val backup: PortfolioBackupFile.Decoded, val encrypted: Boolean = true)
+
+    /** The active account's envelope key for its Portfolio files, the contacts' key (set by
+     *  [NextcloudSyncService]); null when it isn't [wallet]'s or can't be had. */
+    @Volatile
+    var portfolioKeyFor: (wallet: String) -> ByteArray? = { null }
+
+    /** What the backup folder holds, as far as the Portfolio is concerned. */
+    data class ServerPortfolios(
+        val own: List<ServerPortfolioFile> = emptyList(),
+        /** Lowercased names of everything else there: another account's portfolio, or any other
+         *  file. A portfolio's file goes beside these, never over them. */
+        val taken: Set<String> = emptySet(),
+    )
+
+    /** Reads the backup folder. Any file that can't be downloaded throws, so nothing is written or
+     *  deleted on a partial view of what's there. Without the account's key nothing is read. */
+    suspend fun readServerPortfolios(target: BackupTarget): ServerPortfolios =
+        readServerPortfolios(target.wallet, target.account, target.folder)
+
+    /** The active wallet with its own stored login and backup folder, read together: what a backup
+     *  snapshots at its start and uses for every read, PUT and DELETE, so a wallet switch midway
+     *  can never send one account's files to another's Nextcloud. Null while none is connected. */
+    data class BackupTarget(val wallet: String, val account: NextcloudAccount, val folder: String)
+
+    fun backupTarget(): BackupTarget? {
+        val wallet = currentWalletAddress ?: return null
+        // the login stored for this very wallet, not the in-memory one a switch may be replacing
+        val account = storedAccount(walletHashSuffix(wallet)) ?: return null
+        return BackupTarget(wallet, account, account.backupFolder ?: BACKUP_FOLDER_NAME)
+    }
+
+    /**
+     * What each file is, as KaPay iPhone reads them (its per-portfolio encryption, 2026-11-06):
+     * - an envelope that opens with this account's key and holds this account's `walletAddress` is
+     *   this account's;
+     * - an envelope with this account's `walletHint` that won't open is this account's damaged file:
+     *   its name may be used again and written over;
+     * - any other envelope, or a file that isn't a portfolio, is someone else's: left alone, and
+     *   numbered around;
+     * - a plain file (no envelope) is read as before, and if it's this account's it's rewritten
+     *   encrypted at the next backup; once a full backup has run, or any of this account's files
+     *   is encrypted, plain files are someone else's ([isPlainPortfoliosRetired]), since anyone
+     *   can write one.
+     * Off the main thread whoever calls it: the key derivation, decryption and JSON parsing are
+     * real work (Settings' backup info calls this from a composable's scope).
+     */
+    private suspend fun readServerPortfolios(walletAtStart: String, account: NextcloudAccount, folder: String): ServerPortfolios = withContext(Dispatchers.IO) {
+        val key = portfolioKeyFor(walletAtStart) ?: throw NextcloudException(BackupCrypto.KEY_UNAVAILABLE_MESSAGE)
+        val hint = BackupCrypto.walletHint(walletAtStart)
+        val listing = try {
+            listFolder(account, folder)
+        } catch (e: NextcloudHttpException) {
+            if (e.code != 404) throw e
+            return@withContext ServerPortfolios()
+        }
+        val own = mutableListOf<ServerPortfolioFile>()
+        val taken = mutableSetOf<String>()
+        // A plain file carries no proof of who wrote it (the owner inside is a public address), so
+        // plain files count only until this account's own have been encrypted (iOS 1652437).
+        val plainRetired = isPlainPortfoliosRetired(walletAtStart)
+        for (file in listing) {
+            if (file.isDirectory) continue
+            var read: CachedPortfolioFile? = null
+            if (isPortfolioFileCandidate(file.name, size = file.size)) {
+                val cacheKey = "$walletAtStart\u0000${file.path}"
+                val cached = portfolioFileCache[cacheKey]
+                read = if (file.modifiedMs != null && cached != null && cached.modifiedMs == file.modifiedMs && cached.size == file.size) {
+                    cached
+                } else {
+                    readPortfolioFile(downloadFile(account, file.path, BACKUP_MAX_BYTES), key, hint, file)
+                        .also { portfolioFileCache[cacheKey] = it }
+                }
+            }
+            val backup = read?.backup
+            if (backup != null && backup.type == PortfolioBackupFile.KIND && backup.version <= PortfolioBackupFile.CURRENT_VERSION &&
+                backup.walletAddress?.lowercase() == walletAtStart.lowercase() &&
+                !(read?.encrypted != true && plainRetired)
+            ) {
+                own += ServerPortfolioFile(file, backup, encrypted = read?.encrypted ?: false)
+            } else if (read?.damaged != true) {
+                taken += file.name.lowercase()
+            }
+        }
+        // Once any of this account's files is encrypted, a plain one proves nothing (its owner is a
+        // public address): it may have been planted, so it is left alone like anyone else's (iOS 2da5f4b).
+        if (own.any { it.encrypted }) {
+            own.filterNot { it.encrypted }.forEach { taken += it.file.name.lowercase() }
+            own.removeAll { !it.encrypted }
+        }
+        ServerPortfolios(own, taken)
+    }
+
+    /** One downloaded file, opened with [key] if it's an envelope. */
+    private fun readPortfolioFile(data: ByteArray, key: ByteArray, hint: String, file: NextcloudFile): CachedPortfolioFile {
+        val text = String(data, Charsets.UTF_8)
+        if (BackupCrypto.envelopeVersion(text) == null) {
+            val plain = runCatching { PortfolioBackupFile.decode(data) }.getOrNull()
+            return CachedPortfolioFile(file.modifiedMs, file.size, plain, encrypted = false)
+        }
+        val opened = if (BackupCrypto.isEnvelope(text)) runCatching { BackupCrypto.decrypt(text, key) }.getOrNull() else null
+        if (opened == null) {
+            // this account's file that won't open, or someone else's
+            val ours = BackupCrypto.isEnvelope(text) && BackupCrypto.envelopeWalletHint(text)?.equals(hint, ignoreCase = true) == true
+            return CachedPortfolioFile(file.modifiedMs, file.size, null, encrypted = true, damaged = ours)
+        }
+        val backup = runCatching { PortfolioBackupFile.decode(opened.toByteArray(Charsets.UTF_8)) }.getOrNull()
+        return CachedPortfolioFile(file.modifiedMs, file.size, backup, encrypted = true)
     }
 
     // -------------------------------------------------------------------------
@@ -525,31 +1137,32 @@ class NextcloudService @Inject constructor(
 
     /** The backup files' server-side metadata (a null file = not backed up yet, or unreadable). */
     data class BackupInfo(
-        val addressBook: NextcloudFile? = null,
+        val contacts: NextcloudFile? = null,
         val portfolio: NextcloudFile? = null,
-    ) {
-        val isEmpty: Boolean get() = addressBook == null && portfolio == null
-    }
+    )
 
-    /** What the KaChat folder holds of the backup, the new names first (iOS `fetchBackupInfo`).
-     *  A missing folder lists as a 404, which also just means "no backup yet". */
-    suspend fun fetchWalletBackupInfo(): BackupInfo {
-        val listing = runCatching { listFolder(BACKUP_FOLDER_NAME) }.getOrNull() ?: return BackupInfo()
-        fun file(names: List<String>) = names.firstNotNullOfOrNull { name ->
-            listing.firstOrNull { it.name == name && !it.isDirectory }
+    /** What the backup folder holds of the backup (iOS `fetchBackupInfo`). A missing folder lists as
+     *  a 404, which also just means "no backup yet". */
+    suspend fun fetchWalletBackupInfo(): BackupInfo = withContext(Dispatchers.IO) {
+        val contacts = contactsFileInfo()
+        val target = backupTarget() ?: return@withContext BackupInfo(contacts = contacts)
+        val server = try {
+            readServerPortfolios(target)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return@withContext BackupInfo(contacts = contacts)
         }
-        return BackupInfo(
-            addressBook = file(listOf(ADDRESS_BOOK_FILE_NAME) + LEGACY_ADDRESS_BOOK_FILE_NAMES),
-            portfolio = file(listOf(PORTFOLIO_FILE_NAME) + LEGACY_PORTFOLIO_FILE_NAMES),
-        )
+        // the newest of the portfolios' files
+        BackupInfo(contacts = contacts, portfolio = server.own.map { it.file }.maxByOrNull { it.modifiedMs ?: Long.MIN_VALUE })
     }
 
-    /** A backup file under [name], else under a name it had before ([legacy], newest first); null
-     *  when none is there (iOS `downloadBackupFile`). Any other failure throws. */
-    suspend fun downloadBackupFile(name: String, legacy: List<String>): ByteArray? {
+    /** A plain file in the KaChat folder under [name], else under a name it had before ([legacy],
+     *  newest first); null when none is there (iOS `downloadBackupFile`). Any other failure throws. */
+    suspend fun downloadBackupFile(name: String, legacy: List<String>, account: NextcloudAccount = requireAccount()): ByteArray? {
         for (candidate in listOf(name) + legacy) {
             try {
-                return downloadFile("$BACKUP_FOLDER_NAME/$candidate", maxBytes = BACKUP_MAX_BYTES)
+                return downloadFile(account, "$BACKUP_FOLDER_NAME/$candidate", BACKUP_MAX_BYTES)
             } catch (e: NextcloudHttpException) {
                 if (e.code != 404) throw e
             }
@@ -557,25 +1170,17 @@ class NextcloudService @Inject constructor(
         return null
     }
 
-    /**
-     * Deletes the contacts and Portfolio backups (every name each has had) from the user's Nextcloud.
-     * Only ever on the user's say-so - the Delete Account option that names it. KaChat's chat
-     * backup in the same folder is left alone. A 404 is the state being asked for.
-     */
-    suspend fun deleteRemoteBackup(): Unit = withContext(Dispatchers.IO) {
-        val account = requireAccount()
-        for (name in listOf(ADDRESS_BOOK_FILE_NAME, PORTFOLIO_FILE_NAME) + LEGACY_ADDRESS_BOOK_FILE_NAMES + LEGACY_PORTFOLIO_FILE_NAMES) {
-            val request = Request.Builder()
-                .url(davUrl(account, "$BACKUP_FOLDER_NAME/$name"))
-                .delete()
-                .header("Authorization", basicAuth(account))
-                .build()
-            client.newCall(request).execute().use { response ->
-                if (response.code == 401) throw NextcloudException(BAD_CREDENTIALS)
-                if (!response.isSuccessful && response.code != 404) throw NextcloudHttpException(response.code)
-            }
+    /** Deletes a file from the user's Nextcloud. 404: nothing there, which is the state asked for. */
+    suspend fun deleteFile(path: String, account: NextcloudAccount = requireAccount()): Unit = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(davUrl(account, path))
+            .delete()
+            .header("Authorization", basicAuth(account))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (response.code == 401) throw NextcloudRejectedLoginException()
+            if (!response.isSuccessful && response.code != 404) throw NextcloudHttpException(response.code)
         }
-        Log.i(TAG, "Backup deleted")
     }
 
     // -------------------------------------------------------------------------
@@ -602,41 +1207,46 @@ class NextcloudService @Inject constructor(
         return builder.build()
     }
 
-    /**
-     * Uploads [bytes] as [filename] into the KaChat folder, creating it if it isn't there yet,
-     * and returns the stored path. A file of the same name is replaced. [keepSpaces] keeps a name
-     * the user gave (a portfolio's, "KaChat Address Book", the backup's "KaPay …") readable in
-     * Nextcloud instead of turning its spaces into underscores (iOS 87b2a0b).
-     */
-    suspend fun uploadToKaChatFolder(
-        bytes: ByteArray,
-        filename: String,
-        contentType: String,
-        keepSpaces: Boolean = false,
-    ): String = withContext(Dispatchers.IO) {
-        val account = requireAccount()
-        val folder = BACKUP_FOLDER_NAME
-        // Level by level: MKCOL is not recursive, and 405 means the level already exists.
+    /** Makes [folder], level by level: MKCOL is not recursive, and 405 means the level already
+     *  exists. The files root ("") needs nothing. */
+    private fun ensureFolder(account: NextcloudAccount, folder: String) {
         var level = ""
         for (part in folder.split("/").filter { it.isNotEmpty() }) {
             level = if (level.isEmpty()) part else "$level/$part"
             val mkcol = Request.Builder().url(davUrl(account, level)).method("MKCOL", null)
                 .header("Authorization", basicAuth(account)).build()
             client.newCall(mkcol).execute().use { response ->
-                if (response.code == 401) throw NextcloudException(BAD_CREDENTIALS)
+                if (response.code == 401) throw NextcloudRejectedLoginException()
                 if (!response.isSuccessful && response.code != 405) throw NextcloudHttpException(response.code)
             }
         }
-        // iOS sanitizedFilename: letters, marks and digits of any script stay (CharacterSet
-        // .alphanumerics), plus "._-" and, with keepSpaces, the space.
-        val disallowed = if (keepSpaces) Regex("[^\\p{L}\\p{M}\\p{N}._ -]") else Regex("[^\\p{L}\\p{M}\\p{N}._-]")
-        val storedName = filename.replace(disallowed, "_").takeIf { it.isNotBlank() } ?: "file"
-        val path = "$folder/$storedName"
+    }
+
+    /**
+     * Uploads [bytes] as [filename] into the KaChat folder, or [folder] ("" is the files root),
+     * creating it if it isn't there yet, and returns the stored path. A file of the same name is
+     * replaced. [keepSpaces] keeps a name the user gave (a portfolio's, "KaChat Address Book")
+     * readable in Nextcloud instead of turning its spaces into underscores (iOS 87b2a0b).
+     */
+    suspend fun uploadToKaChatFolder(
+        bytes: ByteArray,
+        filename: String,
+        contentType: String,
+        keepSpaces: Boolean = false,
+        folder: String? = null,
+        /** A backup's snapshotted login ([BackupTarget]); the current one otherwise. */
+        account: NextcloudAccount? = null,
+    ): String = withContext(Dispatchers.IO) {
+        val account = account ?: requireAccount()
+        val target = folder ?: BACKUP_FOLDER_NAME
+        ensureFolder(account, target)
+        val storedName = sanitizedFilename(filename, keepSpaces)
+        val path = if (target.isEmpty()) storedName else "$target/$storedName"
         val mediaType = contentType.toMediaTypeOrNull() ?: "application/octet-stream".toMediaType()
         val put = Request.Builder().url(davUrl(account, path)).put(bytes.toRequestBody(mediaType))
             .header("Authorization", basicAuth(account)).build()
         client.newCall(put).execute().use { response ->
-            if (response.code == 401) throw NextcloudException(BAD_CREDENTIALS)
+            if (response.code == 401) throw NextcloudRejectedLoginException()
             if (!response.isSuccessful) throw NextcloudHttpException(response.code)
         }
         path
@@ -644,11 +1254,13 @@ class NextcloudService @Inject constructor(
 
     /** A file's bytes, for importing it. Every failure throws so the caller can say what went
      *  wrong ([NextcloudHttpException] carries the status); capped at [maxBytes]. */
-    suspend fun downloadFile(relativePath: String, maxBytes: Long = 10_000_000L): ByteArray = withContext(Dispatchers.IO) {
-        val account = requireAccount()
+    suspend fun downloadFile(relativePath: String, maxBytes: Long = 10_000_000L): ByteArray =
+        downloadFile(requireAccount(), relativePath, maxBytes)
+
+    private suspend fun downloadFile(account: NextcloudAccount, relativePath: String, maxBytes: Long): ByteArray = withContext(Dispatchers.IO) {
         val get = Request.Builder().url(davUrl(account, relativePath)).header("Authorization", basicAuth(account)).build()
         client.newCall(get).execute().use { response ->
-            if (response.code == 401) throw NextcloudException(BAD_CREDENTIALS)
+            if (response.code == 401) throw NextcloudRejectedLoginException()
             if (!response.isSuccessful) throw NextcloudHttpException(response.code)
             val body = response.body ?: throw NextcloudException(MALFORMED)
             if (body.contentLength() > maxBytes) throw NextcloudException("That file is too large to import.")
@@ -660,8 +1272,9 @@ class NextcloudService @Inject constructor(
 
     /** Lists one folder (non-recursive) of the connected account's files via a Depth-1 PROPFIND
      *  - the import file pickers' data source. */
-    suspend fun listFolder(relativePath: String = ""): List<NextcloudFile> = withContext(Dispatchers.IO) {
-        val account = requireAccount()
+    suspend fun listFolder(relativePath: String = ""): List<NextcloudFile> = listFolder(requireAccount(), relativePath)
+
+    private suspend fun listFolder(account: NextcloudAccount, relativePath: String): List<NextcloudFile> = withContext(Dispatchers.IO) {
         val davBasePath = "/remote.php/dav/files/${account.username}"
         // Normalized form of the listed folder, for the parser's self-entry exclusion below.
         val listedPath = relativePath.split("/").filter { it.isNotEmpty() }.joinToString("/")
@@ -681,7 +1294,7 @@ class NextcloudService @Inject constructor(
             .build()
 
         client.newCall(request).execute().use { response ->
-            if (response.code == 401) throw NextcloudException(BAD_CREDENTIALS)
+            if (response.code == 401) throw NextcloudRejectedLoginException()
             if (response.code != 207) throw NextcloudHttpException(response.code)
             val xml = response.body?.string() ?: throw NextcloudException(MALFORMED)
             parseMultistatus(xml, davBasePath, listedPath)

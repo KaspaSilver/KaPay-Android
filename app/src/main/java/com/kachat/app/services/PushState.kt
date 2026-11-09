@@ -27,10 +27,11 @@ import javax.inject.Singleton
  * any registration failure, on unregister, and whenever FCM itself is unavailable (no
  * google-services.json / no Play services — registration can't succeed then, so it never turns
  * on). Consumers ([ChatRepository], [BroadcastScanningService], [KaPostsNotificationPoller])
- * consult it at their notification-posting sites, and [ChatRepository]'s 2s sync loop plus
- * [NodePoolManager]'s probe loop additionally PAUSE while the app is backgrounded and this flag
- * is true (battery: an exempted background process must not poll forever when the server is the
- * delivery path) — both resume instantly on foreground or the flag turning false.
+ * consult it at their notification-posting sites, and [ChatRepository]'s 2s sync loop
+ * additionally PAUSES while the app is backgrounded and this flag is true (battery: an exempted
+ * background process must not poll forever when the server is the delivery path) — it resumes
+ * instantly on foreground or the flag turning false. [NodePoolManager]'s probe loop pauses on
+ * every background whatever this flag says.
  * Group notifications are deliberately NOT gated anywhere: group push doesn't exist (the
  * registration is the LegacyV1 shape with no watched_group_ids), so the scanners stay the only
  * source for those.

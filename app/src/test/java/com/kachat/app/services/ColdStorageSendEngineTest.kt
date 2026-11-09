@@ -26,6 +26,23 @@ class ColdStorageSendEngineTest {
         requiredAmount = amount + fee
     )
 
+    // MARK: a server's fee rate (iOS 953b255, IOS-061)
+
+    @Test
+    fun `a bad quoted fee rate is ignored rather than paid`() {
+        val minimum = com.kachat.app.util.KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM
+        listOf(null, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, -1.0, 1e30).forEach {
+            assertEquals(minimum, ColdStorageSendEngine.quotedFeeRate(it))
+        }
+    }
+
+    @Test
+    fun `a real quoted fee rate is rounded up and floored at the minimum`() {
+        val minimum = com.kachat.app.util.KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM
+        assertEquals(minimum, ColdStorageSendEngine.quotedFeeRate(0.5))
+        assertEquals(minimum + 11, ColdStorageSendEngine.quotedFeeRate(minimum + 10.5))
+    }
+
     // MARK: change / dust (iOS e6f0dfe, audit IOS-013)
 
     @Test

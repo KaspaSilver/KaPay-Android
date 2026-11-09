@@ -122,6 +122,19 @@ object IosToasts {
 }
 
 /**
+ * Opens [url] (an explorer page, mostly), or says so in a toast when nothing on the phone can
+ * open it: [androidx.compose.ui.platform.UriHandler.openUri] throws when no browser is installed
+ * or enabled, which would otherwise take the screen down with it.
+ */
+fun androidx.compose.ui.platform.UriHandler.openUriOrToast(url: String) {
+    try {
+        openUri(url)
+    } catch (e: Exception) {
+        IosToasts.error(com.kachat.app.util.tr(com.kachat.app.R.string.no_app_to_open_link))
+    }
+}
+
+/**
  * A toast bound to a piece of state, as iOS's `.toast(message:)` modifier is bound to an optional
  * string: up while [message] is non-null, down when it turns null or this leaves the screen.
  */

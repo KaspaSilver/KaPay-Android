@@ -38,9 +38,10 @@ import com.kachat.app.ui.theme.LocalAppColors
  * Contact avatar — the single place the app's avatar resolution order lives, used everywhere a
  * contact is shown:
  *
- *   1. [imageUrl] — the contact's KNS profile photo (a remote https URL), when they have one.
- *   2. [backupPhotoBase64] — the photo carried in the chat backup (e.g. one set on desktop).
- *   3. the person glyph.
+ *   1. the photo you assigned to [address] in Contacts (iOS 953b255).
+ *   2. [imageUrl] — the contact's KNS profile photo (a remote https URL), when they have one.
+ *   3. [backupPhotoBase64] — the photo carried in the chat backup (e.g. one set on desktop).
+ *   4. the person glyph.
  *
  * KaChat no longer reads the phone's Contacts (iOS 00767a4), so there is no Contacts-app photo.
  * The image goes through Coil (memory/disk caches, off-main-thread decode); one that fails to
@@ -60,9 +61,17 @@ fun ContactAvatar(
     backgroundColor: Color = LocalAppColors.current.surface,
     fontSize: TextUnit = 16.sp,
     backupPhotoBase64: String? = null,
-    /** Whose avatar this is (a `kaspa:` / `kaspatest:` address), for the testnet `.kachat` rule. */
-    address: String? = null
+    /** Whose avatar this is (a `kaspa:` / `kaspatest:` address), for your Contacts photo and the
+     *  testnet `.kachat` rule. */
+    address: String? = null,
+    /** False on the Contacts editor, which draws its own pending or removed photo. */
+    showAssignedPhoto: Boolean = true,
 ) {
+    // The photo you assigned to this address in Contacts. Your own choice, so it wins over the
+    // avatar the address set for itself, as it does on the Contacts screen (iOS 953b255).
+    val addressBook = if (showAssignedPhoto && address != null) com.kachat.app.services.AddressBookManager.shared else null
+    val photoVersion = addressBook?.photoVersion ?: 0
+    val assignedPhoto = remember(address, photoVersion, addressBook) { addressBook?.photo(address)?.asImageBitmap() }
     val shownUrl = if (address != null && com.kachat.app.services.kachatnames.KachatNamesService.isEnabled) {
         kachatAvatarUrl(address)
     } else {
@@ -91,7 +100,16 @@ fun ContactAvatar(
             .background(backgroundColor),
         contentAlignment = Alignment.Center
     ) {
-        AvatarImageChain(candidates, fallbackText, fontSize, backupBitmap)
+        if (assignedPhoto != null) {
+            Image(
+                bitmap = assignedPhoto,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            AvatarImageChain(candidates, fallbackText, fontSize, backupBitmap)
+        }
     }
 }
 

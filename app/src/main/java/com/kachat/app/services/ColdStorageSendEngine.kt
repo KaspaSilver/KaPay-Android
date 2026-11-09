@@ -88,7 +88,14 @@ class ColdStorageSendEngine @Inject constructor(
 
             val selection = if (!manualUtxos.isNullOrEmpty()) {
                 val freshByOutpoint = utxos.associateBy { it.outpoint }
-                val resolved = manualUtxos.mapNotNull { freshByOutpoint[it.outpoint] }
+                val picked = manualUtxos.distinctBy { it.outpoint }
+                val resolved = picked.mapNotNull { freshByOutpoint[it.outpoint] }
+                // A picked coin that is gone (spent, or sent from here already) is said, never
+                // quietly dropped: the transaction to sign would not be the one picked (the hot
+                // wallet's words).
+                if (resolved.size != picked.size) {
+                    return@withLock Result.failure(IllegalStateException("Selected UTXOs are no longer available - please reselect"))
+                }
                 KaspaUtxoSelector.selectManualUtxosAndCalculateFee(
                     utxos = resolved,
                     amountSompi = amountSompi,
@@ -239,10 +246,11 @@ class ColdStorageSendEngine @Inject constructor(
     }
 
     /** [fetchUtxos], throwing when the node cannot be asked rather than reading as empty - see
-     *  [KaspaWalletEngine.fetchUtxosOrThrow]. */
+     *  [KaspaWalletEngine.fetchUtxosOrThrow]. Node first, REST second, as the build reads them, so
+     *  coin control offers the coins the build will find. */
     suspend fun fetchUtxosOrThrow(fromAddress: String): List<UtxoEntry> {
         val api = networkService.kaspaRestApi.value ?: throw IllegalStateException(COIN_FETCH_NOT_CONNECTED)
-        return pendingSpent.filter(fromAddress, api.getUtxos(fromAddress))
+        return pendingSpent.filter(fromAddress, nodePoolManager.getUtxosByAddress(fromAddress) ?: api.getUtxos(fromAddress))
     }
 
     data class CompoundInputs(val utxos: List<UtxoEntry>, val hasMore: Boolean)
@@ -272,9 +280,7 @@ class ColdStorageSendEngine @Inject constructor(
     suspend fun fetchQuotedFeeRateSompiPerGram(): Long {
         val api = networkService.kaspaRestApi.value ?: return KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM
         return try {
-            val estimate = api.getFeeEstimate()
-            val quoted = estimate.normalBuckets.firstOrNull()?.feerate ?: KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM.toDouble()
-            ceil(quoted).toLong().coerceAtLeast(KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
+            quotedFeeRate(api.getFeeEstimate().normalBuckets.firstOrNull()?.feerate)
         } catch (e: Exception) {
             KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM
         }
@@ -394,6 +400,16 @@ class ColdStorageSendEngine @Inject constructor(
         const val SIGHASH_ALL = 0x01
 
         /**
+         * A server's quoted rate, floored at the network minimum. One server answering NaN, infinity
+         * or 1e30 is ignored rather than paid (iOS 953b255 `fetchQuotedFeeRateSompiPerGram`, IOS-061).
+         */
+        fun quotedFeeRate(quoted: Double?): Long {
+            val minimum = KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM
+            if (quoted == null || !quoted.isFinite() || quoted < 0 || quoted > com.kachat.app.services.kachatnames.KachatNames.MAX_FEERATE) return minimum
+            return ceil(quoted).toLong().coerceAtLeast(minimum)
+        }
+
+        /**
          * The sighash type input [index] was signed with, which must be SIGHASH_ALL (an absent
          * byte means the signer's default, SIGHASH_ALL). Anything else - NONE, SINGLE,
          * ANYONECANPAY - does not commit to the whole transaction, so a buggy or tampered signer's
@@ -432,7 +448,8 @@ class ColdStorageSendEngine @Inject constructor(
             ) {
                 throw IllegalStateException(KaspaUtxoSelector.SMALL_SEND_MASS_MESSAGE)
             }
-            val keepsChange = selection.changeAmount > 0 &&
+            // A selection priced without a change output never gets one (its fee wouldn't cover it).
+            val keepsChange = selection.changeAmount > 0 && selection.changeOutputPriced &&
                 KaspaMass.fitsStorageMass(inputAmounts, listOf(selection.finalAmount, selection.changeAmount))
             if (keepsChange) {
                 outputs.add(

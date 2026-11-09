@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -156,9 +157,9 @@ fun AddressBookScreen(
         // Runs on under the dock, as iOS's content runs on under its tab bar.
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         topBar = {
-            // iOS's bar, with or without entries: the connection dot and the balance centred, and
-            // "Address Book" large under it - its name again since it left the dock (iOS wallet 040f91a).
-            MainPageHeader(title = stringResource(R.string.ab_address_book), onBack = onBack)
+            // iOS's bar, with or without entries: the back button and the balance centred, and
+            // "Contacts" large under it. Its own pushed screen, no connection dot (iOS 953b255).
+            MainPageHeader(title = stringResource(R.string.ab_address_book), onBack = onBack, showConnectionDot = false)
         },
         // Add and Import / Export live behind one floating glass + (like Chats'), not in the bar
         // (iOS wallet 06b5e8a).
@@ -266,15 +267,15 @@ private fun AddressBookActions(show: Boolean, onAdd: () -> Unit, onDismiss: () -
                 IosToasts.show(message)
             } catch (e: AddressBookManager.ImportException) {
                 IosToasts.error(
-                    context.getString(
-                        when (e.reason) {
-                            AddressBookManager.ImportError.NOT_AN_ADDRESS_BOOK -> R.string.ab_err_not_an_export
-                            AddressBookManager.ImportError.EMPTY -> R.string.ab_err_export_empty
-                            AddressBookManager.ImportError.OTHER_NETWORK ->
-                                if (com.kachat.app.util.KaspaNetwork.isTestnet) R.string.ab_err_import_all_mainnet
-                                else R.string.ab_err_import_all_testnet
-                        }
-                    )
+                    when (e.reason) {
+                        AddressBookManager.ImportError.NOT_AN_ADDRESS_BOOK -> context.getString(R.string.ab_err_not_an_export)
+                        AddressBookManager.ImportError.EMPTY -> context.getString(R.string.ab_err_export_empty)
+                        AddressBookManager.ImportError.OTHER_NETWORK -> context.getString(
+                            if (com.kachat.app.util.KaspaNetwork.isTestnet) R.string.ab_err_import_all_mainnet
+                            else R.string.ab_err_import_all_testnet
+                        )
+                        AddressBookManager.ImportError.NEWER_VERSION -> e.message.orEmpty()
+                    }
                 )
             } catch (e: AddressBookManager.SaveException) {
                 IosToasts.error(context.getString(R.string.ab_err_no_wallet))
@@ -533,7 +534,7 @@ fun AddressBookAvatar(
     } else {
         // Exactly the avatar the address set on its own profile - no backup photo of the chat
         // contact (iOS `includeBackupPhoto: false`).
-        ContactAvatar(imageUrl = null, fallbackText = "", size = size, address = address)
+        ContactAvatar(imageUrl = null, fallbackText = "", size = size, address = address, showAssignedPhoto = false)
     }
 }
 
@@ -708,7 +709,7 @@ fun AddressBookEntryDetail(
             SpendingAddressSendFlow(
                 fromAddress = walletAddress.orEmpty(),
                 balanceSompi = balanceSompi,
-                title = "Send Kaspa",
+                title = tr(R.string.kp_send_kaspa_5e5c4),
                 viewModel = walletViewModel,
                 onDone = close,
                 presentedAsSheet = true,

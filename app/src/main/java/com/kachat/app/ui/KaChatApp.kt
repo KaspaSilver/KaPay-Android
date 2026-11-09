@@ -1,5 +1,7 @@
 package com.kachat.app.ui
 
+import com.kachat.app.util.tr
+import com.kachat.app.R
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateDpAsState
@@ -102,11 +104,6 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     // AppTab.coldStorage — hideable like Portfolio/Swap via Settings > Customization > Menu, but
     // no longer a separate opt-in reached through Portfolio's old "Cold Storage Devices" row.
     object ColdStorage : Screen("cold_storage", "Storage",      com.kachat.app.ui.theme.IosSymbols.LockShieldFill)
-    // A placeable tab like any other, matching iOS's AppTab.apps - it can sit in the dock or in
-    // the Kaspa Hub, and it can be reordered in either. It used to be a hardcoded tile appended
-    // to the Hub grid with no Screen behind it, which is exactly why Customize Dock could not
-    // see it. Labeled "Websites" in the dock (the bar truncates hard); "Kaspa Websites" in full.
-    object KaspaWebsites : Screen("kaspa_websites", "Websites", Icons.Default.Public)
     // .kachat names (5.2) - Kaspa Hub > .kachat: the marketplace for KaChat's own names (claim,
     // buy and sell, trustless). UI only until the name service is built (iOS AppTab.kachatNames).
     // Drawn as the ".kachat" wordmark wherever tabs are drawn (see tabIconPainter).
@@ -133,7 +130,7 @@ private fun dockOwnerRoute(route: String?): String? = when (route) {
     "help", "manage_addresses", "identity_address_detail", "spending_address_detail/{index}",
     "kns_domains" -> Screen.Profile.route
     "portfolio_price_chart", "portfolio_value_chart", "portfolio_hashrate_chart" -> Screen.Portfolio.route
-    Screen.Portfolio.route, Screen.ColdStorage.route, Screen.KaspaWebsites.route,
+    Screen.Portfolio.route, Screen.ColdStorage.route,
     Screen.KachatNames.route -> route
     else -> null
 }
@@ -145,8 +142,7 @@ private fun dockOwnerRoute(route: String?): String? = when (route) {
  */
 val Screen.hubTitle: String
     get() = when (this) {
-        Screen.KaspaWebsites -> "Kaspa Websites"
-        Screen.KachatNames -> ".kachat Domains"
+        Screen.KachatNames -> tr(R.string.kp_kachat_domains_df144)
         else -> label
     }
 
@@ -178,7 +174,13 @@ val HOME_ROUTE = Screen.Profile.route
 
 /** Routes drawn as iOS's Settings sheet (see IosSheetColors). None in KaPay: Settings is a dock
  *  tab (iOS wallet 040f91a), and its pages are pushed inside it. */
-val SETTINGS_SHEET_ROUTES = emptySet<String>()
+val SETTINGS_SHEET_ROUTES = setOf("seed_phrase", "account_backup", "backup_hygiene", "nfc_card_backup")
+
+/** Closes a seed route the lock didn't open in this process (`SeedRouteGate`): only that entry,
+ *  and only while it is on top, so a screen already in front is never popped instead. */
+private fun popSeedRoute(navController: androidx.navigation.NavHostController, entry: androidx.navigation.NavBackStackEntry) {
+    if (navController.currentBackStackEntry?.id == entry.id) navController.popBackStack()
+}
 
 /** Tabs besides the pinned one: the wallet's own four. */
 val ASSIGNABLE_TAB_ROUTES = listOf(
@@ -200,7 +202,6 @@ val bottomNavItems = listOf(
     Screen.ColdStorage,
     Screen.AddressBook,
     Screen.KachatNames,
-    Screen.KaspaWebsites,
     Screen.Settings,
 )
 
@@ -220,8 +221,6 @@ val ASSIGNABLE_DOCK_SLOTS: Int get() = MAX_DOCK_ITEMS - PINNED_DOCK_ROUTES.size
  * restores exactly the arrangement the user had before.
  */
 val CHILD_MODE_HIDDEN_ROUTES = setOf(
-    // A browser onto the open web - the one tab most obviously not for a child's phone.
-    Screen.KaspaWebsites.route,
     // A marketplace - buying and selling with real KAS - so Simple Mode hides it, like Swap.
     Screen.KachatNames.route
 )
@@ -302,7 +301,6 @@ fun KaChatApp(
     onPendingOwnAddressHandled: () -> Unit = {}
 ) {
     val isLoggedIn by walletViewModel.isLoggedIn.collectAsState()
-    val mnemonic by walletViewModel.mnemonic.collectAsState()
     val startupResolved by walletViewModel.startupResolved.collectAsState()
 
     if (!startupResolved) {
@@ -313,16 +311,23 @@ fun KaChatApp(
         // keeps the window seamlessly on the background color, iOS-style; the wait is a few
         // milliseconds of DataStore read.
         Box(modifier = Modifier.fillMaxSize())
-    } else if (!isLoggedIn || mnemonic != null) {
-        OnboardingScreen(walletViewModel)
+    } else if (!isLoggedIn) {
+        CompositionLocalProvider(com.kachat.app.ui.screens.LocalSharedWalletViewModel provides walletViewModel) {
+            OnboardingScreen(walletViewModel)
+        }
     } else {
-        MainShell(
-            walletViewModel = walletViewModel,
-            pendingWalletActivityKind = pendingWalletActivityKind,
-            onPendingWalletActivityHandled = onPendingWalletActivityHandled,
-            pendingOwnAddress = pendingOwnAddress,
-            onPendingOwnAddressHandled = onPendingOwnAddressHandled
-        )
+        // Every screen's top-bar balance and backup banner read this one instance rather than
+        // a hiltViewModel() of their own (a fresh WalletViewModel per screen, each re-running
+        // its init) - see LocalSharedWalletViewModel.
+        CompositionLocalProvider(com.kachat.app.ui.screens.LocalSharedWalletViewModel provides walletViewModel) {
+            MainShell(
+                walletViewModel = walletViewModel,
+                pendingWalletActivityKind = pendingWalletActivityKind,
+                onPendingWalletActivityHandled = onPendingWalletActivityHandled,
+                pendingOwnAddress = pendingOwnAddress,
+                onPendingOwnAddressHandled = onPendingOwnAddressHandled
+            )
+        }
     }
 }
 
@@ -490,6 +495,12 @@ fun MainShell(
         if (pendingKachatName != null && com.kachat.app.services.kachatnames.KachatNamesService.isLaunched) {
             navController.navigate(Screen.KachatNames.route) { launchSingleTop = true }
         }
+    }
+
+    // `kapay://market` (iOS 953b255): the .kachat tab, whose screen opens the Marketplace page.
+    val pendingMarketplace by com.kachat.app.ui.screens.KachatDeepLink.pendingMarketplace.collectAsState()
+    LaunchedEffect(pendingMarketplace) {
+        if (pendingMarketplace) navController.navigate(Screen.KachatNames.route) { launchSingleTop = true }
     }
 
     // A payment request tapped, pasted or opened from outside the app (iOS c6851d6
@@ -987,7 +998,7 @@ fun MainShell(
                 popExitTransition = { ExitTransition.None }
             ) {
                 CompositionLocalProvider(com.kachat.app.ui.screens.LocalDockInset provides innerPadding.calculateBottomPadding()) {
-                    PortfolioScreen(navController = navController)
+                    PortfolioScreen(navController = navController, walletViewModel = walletViewModel)
                 }
             }
             composable(
@@ -1042,11 +1053,41 @@ fun MainShell(
                 }
             }
 
-            composable("seed_phrase") {
-                SeedPhraseScreen(
-                    viewModel = walletViewModel,
-                    onBack = { navController.popBackStack() }
-                )
+            composable("seed_phrase") { entry ->
+                // closes itself when restored after a process death, without the lock
+                com.kachat.app.ui.screens.SeedRouteGuard(entry.id, onRefused = { popSeedRoute(navController, entry) }) {
+                    SeedPhraseScreen(
+                        viewModel = walletViewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable("account_backup") { entry ->
+                // closes itself when restored after a process death, without the lock
+                com.kachat.app.ui.screens.SeedRouteGuard(entry.id, onRefused = { popSeedRoute(navController, entry) }) {
+                    com.kachat.app.ui.screens.AccountBackupScreen(
+                        viewModel = walletViewModel,
+                        onClose = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable("nfc_card_backup") { entry ->
+                // closes itself when restored after a process death, without the lock
+                com.kachat.app.ui.screens.SeedRouteGuard(entry.id, onRefused = { popSeedRoute(navController, entry) }) {
+                    com.kachat.app.ui.screens.NfcCardBackupScreen(
+                        viewModel = walletViewModel,
+                        onClose = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable("backup_hygiene") { entry ->
+                // closes itself when restored after a process death, without the lock
+                com.kachat.app.ui.screens.SeedRouteGuard(entry.id, onRefused = { popSeedRoute(navController, entry) }) {
+                    com.kachat.app.ui.screens.BackupHygieneScreen(
+                        viewModel = walletViewModel,
+                        onClose = { navController.popBackStack() }
+                    )
+                }
             }
 
             composable(
@@ -1064,6 +1105,7 @@ fun MainShell(
                 CompositionLocalProvider(com.kachat.app.ui.screens.LocalDockInset provides innerPadding.calculateBottomPadding()) {
                     ColdStorageListScreen(
                         navController = navController,
+                        walletViewModel = walletViewModel,
                         viewModel = sharedColdStorageViewModel(navController)
                     )
                 }
@@ -1192,47 +1234,9 @@ fun MainShell(
                 )
             }
 
-            composable("edit_kns_profile") {
-                EditKnsProfileScreen(
-                    viewModel = walletViewModel,
-                    onBack = { navController.popBackStack() },
-                    onNavigateToDomains = { navController.navigate("kns_domains") },
-                    onNavigateToSetupGuide = { navController.navigate("create_kns_profile") }
-                )
-            }
-
-            composable("edit_kachat_profile") {
-                com.kachat.app.ui.screens.KachatProfileEditorScreen(
-                    onBack = { navController.popBackStack() },
-                    showSetupGuides = walletViewModel.showSetupGuides.collectAsState().value,
-                    onSetupGuide = { navController.navigate("kachat_setup_guide") },
-                )
-            }
-            // The .kachat profile setup guide (iOS b000310) - from Edit KaChat Profile and Help.
+            // The .kachat profile setup guide (iOS b000310) - from Help.
             composable("kachat_setup_guide") {
                 com.kachat.app.ui.screens.KachatSetupGuideScreen(onClose = { navController.popBackStack() })
-            }
-
-            composable("create_kns_profile") {
-                KnsCreateProfileWizardScreen(
-                    viewModel = walletViewModel,
-                    onFinished = { wroteSomething ->
-                        // Reached either straight from the Profile tab (pop back one step is
-                        // correct) or from Edit KNS Profile's "Setup Guide" row. Closing the
-                        // guide without having inscribed anything returns to whichever of those
-                        // it came from. Once it HAS written, pop back PAST the editor rather
-                        // than returning to it: its text fields are seeded once from the profile
-                        // that existed when it opened, so returning would show stale fields and
-                        // let a later Save silently overwrite what the wizard just inscribed.
-                        if (wroteSomething &&
-                            navController.previousBackStackEntry?.destination?.route == "edit_kns_profile"
-                        ) {
-                            navController.popBackStack(route = "edit_kns_profile", inclusive = true)
-                        } else {
-                            navController.popBackStack()
-                        }
-                    }
-                )
             }
 
             composable("kns_domains") {
@@ -1250,6 +1254,9 @@ fun MainShell(
                 Box(modifier = Modifier.background(LocalAppColors.current.background).padding(bottom = innerPadding.calculateBottomPadding())) {
                     SettingsScreen(
                         navController = navController,
+                        // The shared instance, so Account Name renames the account every screen
+                        // reads (the sign-in list included) and a page doesn't re-run its init.
+                        walletViewModel = walletViewModel,
                         sectionKey = backStackEntry.arguments?.getString("sectionKey")
                     )
                 }
@@ -1271,32 +1278,6 @@ fun MainShell(
                 }
             }
 
-            composable("kaspa_apps") {
-                @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-                KaspaAppsScreen(
-                    onBack = { navController.popBackStack() },
-                    onOpen = { app ->
-                        navController.navigate(
-                            "in_app_browser?url=${java.net.URLEncoder.encode(app.url, "UTF-8")}&title=${java.net.URLEncoder.encode(app.name, "UTF-8")}"
-                        )
-                    }
-                )
-            }
-
-            composable(
-                "in_app_browser?url={url}&title={title}",
-                arguments = listOf(
-                    androidx.navigation.navArgument("url") { defaultValue = "" },
-                    androidx.navigation.navArgument("title") { defaultValue = "" }
-                )
-            ) { backStackEntry ->
-                InAppBrowserScreen(
-                    url = java.net.URLDecoder.decode(backStackEntry.arguments?.getString("url") ?: "", "UTF-8"),
-                    title = java.net.URLDecoder.decode(backStackEntry.arguments?.getString("title") ?: "", "UTF-8"),
-                    onClose = { navController.popBackStack() }
-                )
-            }
-
             composable("cache_settings") {
                 val cacheManager: com.kachat.app.services.CacheManager = hiltViewModel<com.kachat.app.viewmodels.CacheViewModel>().cacheManager
                 CacheSettingsScreen(
@@ -1315,32 +1296,8 @@ fun MainShell(
                 )
             }
 
-            composable("language_settings") {
-                LanguageSettingsScreen(
-                    onBack = { navController.popBackStack() }
-                )
-            }
-
-            composable("currency_settings") {
-                CurrencySettingsScreen(
-                    onBack = { navController.popBackStack() }
-                )
-            }
-
             composable("kaspa_explorer_settings") {
                 KaspaExplorerSettingsScreen(
-                    onBack = { navController.popBackStack() }
-                )
-            }
-
-            composable("notification_settings") {
-                NotificationSettingsScreen(
-                    onBack = { navController.popBackStack() }
-                )
-            }
-
-            composable("wallet_notification_settings") {
-                WalletNotificationSettingsScreen(
                     onBack = { navController.popBackStack() }
                 )
             }
@@ -1349,7 +1306,10 @@ fun MainShell(
             composable(Screen.KachatNames.route) {
                 CompositionLocalProvider(com.kachat.app.ui.screens.LocalDockInset provides innerPadding.calculateBottomPadding()) {
                     com.kachat.app.ui.screens.KachatMarketScreen(
-                        onBack = null
+                        onBack = null,
+                        banner = {
+                            com.kachat.app.ui.screens.AccountBackupBanner(walletViewModel) { navController.navigate("account_backup") }
+                        },
                     )
                 }
             }
@@ -1359,21 +1319,6 @@ fun MainShell(
                     com.kachat.app.ui.screens.AddressBookScreen(
                         onBack = { navController.popBackStack() },
                         walletViewModel = walletViewModel,
-                    )
-                }
-            }
-            // Reachable as a dock tab now, not only as a Hub section.
-            @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-            composable("kaspa_websites") {
-                CompositionLocalProvider(com.kachat.app.ui.screens.LocalDockInset provides innerPadding.calculateBottomPadding()) {
-                    KaspaAppsScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpen = { app ->
-                            navController.navigate(
-                                "in_app_browser?url=${java.net.URLEncoder.encode(app.url, "UTF-8")}" +
-                                    "&title=${java.net.URLEncoder.encode(app.name, "UTF-8")}"
-                            )
-                        }
                     )
                 }
             }
@@ -1421,9 +1366,14 @@ private fun OwnAddressHistorySheet(
 ) {
     val coldViewModel = coldStorageViewModel()
     var resolved by remember { mutableStateOf<OwnAddressResolution?>(null) }
-    LaunchedEffect(address) {
+    // Bumped by Try Again, which resolves the address afresh.
+    var attempt by remember { mutableIntStateOf(0) }
+    LaunchedEffect(address, attempt) {
+        resolved = null
         resolved = when {
             walletViewModel.address.value?.equals(address, ignoreCase = true) == true -> OwnAddressResolution.Chatting
+            // its balance couldn't be read: a screen showing 0 would say it's empty (iOS 0799cec)
+            !walletViewModel.canReadOwnAddressCoins(address) -> OwnAddressResolution.Unreadable
             else -> walletViewModel.resolveOwnSpendingAddress(address)?.let { OwnAddressResolution.Spending(it) }
                 ?: coldViewModel.resolveOwnColdAddress(address)?.let { OwnAddressResolution.Cold(it) }
                 ?: OwnAddressResolution.Unknown
@@ -1464,7 +1414,7 @@ private fun OwnAddressHistorySheet(
                             resolvedRow = target.row,
                             closesWithDone = true,
                         )
-                        OwnAddressResolution.Unknown, null -> Column(Modifier.fillMaxSize()) {
+                        OwnAddressResolution.Unreadable, OwnAddressResolution.Unknown, null -> Column(Modifier.fillMaxSize()) {
                             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
                                 TextButton(onClick = onDismiss) {
                                     Text(
@@ -1476,6 +1426,26 @@ private fun OwnAddressHistorySheet(
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 if (target == null) {
                                     CircularProgressIndicator(color = KaspaTeal)
+                                } else if (target == OwnAddressResolution.Unreadable) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                                    ) {
+                                        Text(
+                                            tr(R.string.kp_couldn_t_load_the_coins_at_373c0),
+                                            color = LocalAppColors.current.textSecondary,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            textAlign = TextAlign.Center,
+                                        )
+                                        TextButton(onClick = { attempt++ }) {
+                                            Text(
+                                                androidx.compose.ui.res.stringResource(com.kachat.app.R.string.try_again),
+                                                color = KaspaTeal,
+                                                fontWeight = FontWeight.SemiBold,
+                                            )
+                                        }
+                                    }
                                 } else {
                                     Text(
                                         androidx.compose.ui.res.stringResource(com.kachat.app.R.string.own_address_not_in_wallet),
@@ -1502,4 +1472,7 @@ private sealed interface OwnAddressResolution {
     data class Spending(val entry: com.kachat.app.services.WalletService.SpendingAddressEntry) : OwnAddressResolution
     data class Cold(val row: com.kachat.app.viewmodels.ColdStorageViewModel.AddressRow) : OwnAddressResolution
     data object Unknown : OwnAddressResolution
+    /** Its balance couldn't be read: a screen showing 0 would say it's empty, and its Send would
+     *  be off (iOS 0799cec). */
+    data object Unreadable : OwnAddressResolution
 }

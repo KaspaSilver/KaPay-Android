@@ -3,7 +3,6 @@
     <string name="kas">.kas</string>
     <string name="n_0_00">0.00</string>
     <string name="n_12_words">12 parole</string>
-    <string name="a_kns_inscription_s_commit_transaction">La transazione di commit di un\'iscrizione KNS e andata a buon fine, ma la rivelazione non si e mai completata. Riprova ora per completarla; i fondi sono al sicuro finche non lo fai.</string>
     <string name="accept">Accetta</string>
     <string name="account_name">Nome account</string>
     <string name="active_nodes">Nodi attivi</string>
@@ -20,7 +19,7 @@
     <string name="all_discovered_nodes_sorted_by_state">Tutti i nodi scoperti ordinati per stato e latenza. I nodi sono deduplicati per host:port.</string>
     <string name="amount_kas">Importo (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">Chiunque si unisca allo stesso nome di canale puo vedere e pubblicare messaggi qui. Non c\'e proprietario ne invito.</string>
-    <string name="anyone_with_your_seed_phrase_can">Chiunque abbia la tua seed phrase puo accedere al tuo account. Non condividerla mai con nessuno. Assicurati di annotarla solo per iscritto. Non fare mai uno screenshot ne conservarla sul tuo dispositivo.</string>
+    <string name="anyone_with_your_seed_phrase_can">Chiunque abbia le tue 12 o 24 parole può accedere al tuo account. Non condividerle mai con nessuno.</string>
     <string name="back">Indietro</string>
     <string name="before_you_swap">Prima di scambiare</string>
     <string name="broadcasting">Trasmissione in corso...</string>
@@ -111,7 +110,7 @@
     <string name="join">Unisciti</string>
     <string name="join_or_create_a_channel">Unisciti o crea un canale</string>
     <string name="kas_2">KAS</string>
-    <string name="kns_domains">Domini KNS</string>
+    <string name="kns_domains">I tuoi domini</string>
     <string name="kachat">KaChat</string>
     <string name="kachat_logo">Logo KaChat</string>
     <string name="kachat_can_t_show_notifications_until">KaPay non puo mostrare notifiche finche non le consenti per questa app.</string>
@@ -187,7 +186,6 @@
     <string name="resolving_domain">Risoluzione dominio…</string>
     <string name="retention">Conservazione</string>
     <string name="retry">Riprova</string>
-    <string name="retry_inscription_reveal">Riprova rivelazione iscrizione</string>
     <string name="save">Salva</string>
     <string name="saved_accounts">Account salvati</string>
     <string name="scan">Scansiona</string>
@@ -199,7 +197,7 @@
     <string name="search_chats">Cerca chat</string>
     <string name="secure_messaging_on_kaspa_blockdag">Messaggistica sicura su Kaspa BlockDAG</string>
     <string name="security_warning">Avviso di sicurezza</string>
-    <string name="seed_phrase">Seed Phrase</string>
+    <string name="seed_phrase">12 o 24 parole</string>
     <string name="select_time">Seleziona ora</string>
     <string name="select_chat">Seleziona chat</string>
     <string name="send">Invia</string>
@@ -220,7 +218,7 @@
     <string name="swaps_are_processed_by_changenow_a">Gli scambi vengono elaborati da ChangeNOW, un servizio di terze parti. Continuando, confermi di aver letto e accettato i Termini di servizio propri di ChangeNOW. KaChat si limita a inviare la tua richiesta di scambio e a mostrarne lo stato; KaChat non e responsabile di scambi falliti, ritardati o persi. Se uno scambio non va a buon fine, contatta direttamente il supporto ChangeNOW.</string>
     <string name="tap_an_address_below_to_swap">Tocca un indirizzo qui sotto per scambiare da esso</string>
     <string name="tap_an_address_below_to_use">Tocca un indirizzo qui sotto per usarlo</string>
-    <string name="tap_to_reveal_seed_phrase">Tocca per rivelare la seed phrase</string>
+    <string name="tap_to_reveal_seed_phrase">Tocca per mostrare le tue 12 o 24 parole</string>
     <string name="this_could_take_a_few_minutes">Potrebbe richiedere alcuni minuti mentre si conferma sulla blockchain.</string>
     <string name="this_only_removes_it_from_kachat">Questo lo rimuove solo dalla lista di controllo di KaPay. Non ha alcun effetto sul dispositivo KasSigner o sui fondi che detiene.</string>
     <string name="this_permanently_deletes_every_message_with">Questo elimina definitivamente ogni messaggio con loro su questo dispositivo. Non puo essere annullato; scrivergli di nuovo avvia una conversazione completamente nuova.</string>
@@ -332,7 +330,7 @@
     <string name="version">Versione</string>
     <string name="vibration">Vibrazione</string>
     <string name="view_profile">Vedi profilo</string>
-    <string name="view_seed_phrase">Visualizza seed phrase</string>
+    <string name="view_seed_phrase">Vedi 12 o 24 parole</string>
     <string name="view_in_explorer">Vedi nell\'explorer</string>
     <string name="website">Sito web</string>
     <string name="x">X</string>
@@ -480,7 +478,7 @@
     <!-- .kachat listing, buy and offer (iOS cd9e10c, 0e50fdf) -->
     <string name="kl_offers">Offerte</string>
     <string name="kl_offer">Offerta</string>
-    <string name="kl_offer_detail">Proponi il tuo prezzo. I tuoi KAS restano sulla catena finché il venditore accetta, ritiri l\'offerta o scade, e puoi scrivere prima al venditore.</string>
+    <string name="kl_offer_detail">Fai il tuo prezzo. I tuoi KAS restano sulla chain finché il venditore non accetta, non ritiri l\'offerta o questa non scade.</string>
     <string name="kl_listing">Annuncio</string>
     <string name="kl_price">Prezzo</string>
     <string name="kl_buy_now">Compra ora</string>
@@ -971,7 +969,7 @@
     <string name="create_wallet_name_title">Crea un nome per il tuo wallet</string>
     <string name="create_wallet_name_detail">Questo nome è salvato solo su questo dispositivo, per distinguere i tuoi wallet. Nessun altro lo vedrà mai.</string>
     <string name="create_wallet_seed_next_warning">La schermata successiva mostra la tua seed phrase. È l\'unico modo per recuperare il tuo account: scrivila, conservala in modo sicuro e assicurati che nessuno veda il tuo schermo.</string>
-    <string name="choose_seed_phrase_length">Scegli la lunghezza della seed phrase</string>
+    <string name="choose_seed_phrase_length">Scegli 12 o 24 parole</string>
     <!-- Create Account, step 3: the seed phrase (iOS CreateWalletSeedStep) -->
     <string name="write_down_your_seed_phrase">Scrivi la tua seed phrase</string>
     <string name="store_this_in_a_safe_place_anyone_with_these_words">Conserva questo in un luogo sicuro. Chiunque abbia queste parole puo accedere al tuo account.</string>
@@ -1030,9 +1028,9 @@
     <string name="kn_commit_waiting_busy">La rete è congestionata. Il tuo impegno attende un blocco.</string>
     <string name="kn_commit_sent_again">La rete è congestionata, quindi l\'impegno è stato inviato di nuovo.</string>
     <!-- Onboarding: import length step and the seed phrase explainer (iOS dd0aab1) -->
-    <string name="import_seed_length_detail">Quante parole ha la seed phrase che stai importando?</string>
+    <string name="import_seed_length_detail">Quante parole stai importando?</string>
     <string name="what_is_this">Che cos\'è?</string>
-    <string name="what_is_a_seed_phrase">Che cos\'è una seed phrase?</string>
+    <string name="what_is_a_seed_phrase">Cosa sono le mie 12 o 24 parole?</string>
     <string name="seed_phrase_explainer_master_key">Una seed phrase è un elenco di 12 o 24 parole comuni che fa da chiave principale del tuo account. Il tuo wallet, il tuo indirizzo di chat e i tuoi messaggi derivano tutti da essa.</string>
     <string name="seed_phrase_explainer_anyone">Chiunque abbia queste parole può prendere tutto ciò che c\'è nel tuo account. Se le perdi e perdi anche questo dispositivo, nessuno potrà recuperare il tuo account, nemmeno KaPay.</string>
     <string name="seed_phrase_explainer_paper">Scrivi le parole su carta, in ordine, e conservale in un posto sicuro e privato. Non digitarle mai su un sito web, non inviarle in chat e non tenerle in uno screenshot o in note sul cloud.</string>
@@ -1048,7 +1046,7 @@
     <string name="cache_web_responses">Risposte web</string>
     <string name="cache_web_responses_detail">Anteprime dei link e risposte API conservate nella cache di rete del sistema.</string>
     <string name="cache_temporary_files">File temporanei</string>
-    <string name="cache_temporary_files_detail">File temporanei dall\'invio di foto e note vocali. Si possono rimuovere in qualsiasi momento.</string>
+    <string name="cache_temporary_files_detail">File temporanei di cui l\'app non ha più bisogno. Puoi rimuoverli in qualsiasi momento.</string>
     <!-- Import Account, the words screen (iOS ImportWalletView) -->
     <string name="import_words_continue">Continua</string>
     <!-- .kachat Renew: choose the period first (iOS 26bd5dc) -->
@@ -1379,4 +1377,7 @@
     <string name="kaspa_node_settings_footer">La scansione automatica trova i migliori nodi disponibili e vi si connette. Scegliere un nodo specifico si connette solo a quello, senza ripiegare su altri. Non influisce su indicizzatori, domini o explorer delle altre schede. Aggiungi i tuoi indirizzi alla rubrica IP qui sotto per sceglierli qui.</string>
     <string name="ab_picker_empty_body">Aggiungi contatti in Portafoglio > Contatti.</string>
     <string name="ab_no_contacts">Ancora nessun contatto</string>
+    <string name="where_is_this_seed_phrase_from">Da dove vengono le tue 12 o 24 parole?</string>
+    <string name="different_wallets_store_your_kaspa">Wallet diversi conservano i tuoi Kaspa su percorsi di indirizzi diversi. Scegli da dove provengono queste parole, così KaPay trova i tuoi fondi e i tuoi domini.</string>
+    <string name="import_words_enter_recovery_phrase">Inserisci le tue 12 o 24 parole</string>
 </resources>

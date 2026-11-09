@@ -318,6 +318,11 @@ class KachatNamesService @Inject constructor(
         }
     }
 
+    /** [utxos] without the coins a send still in flight spent ([NodePoolManager.submittedInputs],
+     *  iOS 1652437 `WalletService.unreservedUtxos`): what a name transaction may fund itself with. */
+    fun unreserved(utxos: List<Utxo>): List<Utxo> =
+        nodePoolManager.submittedInputs.unreserved(utxos) { it.outpoint.toString() }
+
     /** Whether a node still holds [txId] in its mempool (a commit not on chain yet: waiting, or
      *  dropped by a busy network; iOS b219bb0 `NodePoolService.getMempoolEntry`). */
     suspend fun isInMempool(txId: String): Boolean = try {
@@ -368,7 +373,8 @@ class KachatNamesService @Inject constructor(
         // A node can accept it while its answer is lost and a raced node rejects it: looked up by
         // id before failing, so a retry never pays a price twice (iOS 9139e88, IOS-014).
         val txId = withContext(Dispatchers.IO) {
-            nodePoolManager.submitConfirmingKnown(expected, networkService.kaspaRestApi.value) {
+            // its coins stay out of the next send, sent or unknown (iOS 1652437)
+            nodePoolManager.submitConfirmingKnown(expected, networkService.kaspaRestApi.value, tx.inputs.map { it.outpoint.toString() }) {
                 nodePoolManager.getBroadcastConnection().submitRpcTransaction(rpcTransaction(tx))
             }
         }

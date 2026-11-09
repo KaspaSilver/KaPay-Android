@@ -74,6 +74,56 @@ object StartupSafety {
             Log.e(tag, "Encrypted store '$fileName' could not be opened; using memory for this session (the file is left as it is)", e)
             InMemorySharedPreferences()
         }
+
+    private fun openEncryptedPrefs(context: Context, fileName: String): SharedPreferences {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        return EncryptedSharedPreferences.create(
+            context,
+            fileName,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
+
+    /**
+     * The seed stores (WalletManager's, Cold Storage's): the EncryptedSharedPreferences file
+     * [fileName], made as they always made it. A file this phone's Keystore can't open (one
+     * carried over from another phone, whose Keystore key never came with it, or a damaged one)
+     * used to end the app at every launch. It is now copied aside, never deleted, into
+     * `no_backup/unreadable_stores/`, and the store starts empty, so the user lands on the
+     * sign-in screen and can import their words. Only the event is logged, no contents.
+     *
+     * If the empty store can't be made either (the Keystore itself is failing), that throws as
+     * before: an in-memory store would let someone import into what is lost at the next launch.
+     */
+    fun encryptedPrefsMovingAsideUnreadable(context: Context, fileName: String, tag: String): SharedPreferences {
+        try {
+            return openEncryptedPrefs(context, fileName)
+        } catch (e: Exception) {
+            val file = java.io.File(context.applicationInfo.dataDir, "shared_prefs/$fileName.xml")
+            val asideDir = java.io.File(context.noBackupFilesDir, "unreadable_stores")
+            val aside = java.io.File(asideDir, "$fileName-${System.currentTimeMillis()}.xml")
+            if (file.exists()) {
+                try {
+                    asideDir.mkdirs()
+                    file.copyTo(aside, overwrite = false)
+                } catch (copyFailure: Exception) {
+                    // Couldn't keep a copy: the file stays exactly as it is, and the failure stands.
+                    Log.e(tag, "Encrypted store '$fileName' is unreadable and could not be copied aside", copyFailure)
+                    throw e
+                }
+            }
+            Log.e(tag, "Encrypted store '$fileName' could not be opened (${e.javaClass.simpleName}); " +
+                "${if (file.exists()) "copied aside as ${aside.name}" else "no file"}, starting empty")
+            // Emptied through SharedPreferences, not by touching the file: the process caches each
+            // prefs file's contents, and the cached copy would otherwise fail the second open too.
+            context.getSharedPreferences(fileName, Context.MODE_PRIVATE).edit().clear().commit()
+            return openEncryptedPrefs(context, fileName)
+        }
+    }
 }
 
 /**

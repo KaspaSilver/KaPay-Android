@@ -34,25 +34,6 @@ fun addressDisplayName(
 }
 
 /**
- * A KNS commit transaction that broadcast successfully but whose reveal hasn't completed yet —
- * persisted the moment commit succeeds, cleared the moment reveal succeeds, so a crash or failure
- * between the two doesn't strand the commit amount with no way to recover it. iOS has no
- * equivalent safety net; this is intentionally more careful given real KAS is on the line.
- */
-data class PendingKnsCommit(
-    val commitTxId: String,
-    val redeemScriptHex: String,
-    val commitScriptPubKeyHex: String,
-    val commitAmountSompi: Long,
-    val revealAmountSompi: Long,
-    val revealTargetAddress: String,
-    val operationType: String, // "domain" | "profile" — for the recovery prompt's wording only
-    // Nullable so Gson leaves it null (falls back to the identity address) when deserializing a
-    // commit persisted before this field existed, rather than failing to parse it entirely.
-    val changeAddress: String? = null
-)
-
-/**
  * A user-saved "host:port" node address, kept purely for quick copy/paste into the
  * trusted-node field in Connection Settings - not itself used for connections.
  */

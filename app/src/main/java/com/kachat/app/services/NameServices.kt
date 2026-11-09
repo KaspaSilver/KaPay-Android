@@ -1,5 +1,7 @@
 package com.kachat.app.services
 
+import com.kachat.app.util.tr
+import com.kachat.app.R
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -410,7 +412,14 @@ class NameServicesClient @Inject constructor(
         val registry = kachatRegistry.get()
         registry.refreshIfStale()
         return try {
-            val owner = KachatNames.resolvedOwner(registry.lookup(canonical), registry.graceMs)
+            val lookup = registry.lookup(canonical)
+            val owner = KachatNames.resolvedOwner(lookup, registry.graceMs)
+            // A payment is about to trust this: an indexer's answer counts only if it is about this
+            // name and the chain holds the record (iOS 953b255).
+            if (owner != null && lookup is com.kachat.app.services.kachatnames.Lookup.Registered) {
+                if (lookup.info.name != canonical) throw KachatNames.Failure("the indexer answered for another name")
+                registry.confirmOnChain(lookup.info)
+            }
             NameResolution(NameServiceTLD.KACHAT, display, owner?.let { KachatNamesRegistry.address(it) }, failed = false)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -526,6 +535,10 @@ class NameServicesClient @Inject constructor(
                 (results.any { it.tld == NameServiceTLD.KACHAT && it.notLive } || !NameServiceTLD.KACHAT.isLive)
             ) {
                 return context.getString(com.kachat.app.R.string.kachat_names_not_live_here)
+            }
+            // the service couldn't be asked: that says nothing about whether the name exists (iOS 2da5f4b)
+            if (results.any { it.tld == wanted && it.failed }) {
+                return tr(R.string.kp_couldn_t_look_up_right_now_f59cb, wanted.suffix)
             }
             return context.getString(com.kachat.app.R.string.no_tld_domain_found, wanted.suffix)
         }

@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -257,7 +258,7 @@ fun AddressDomainServiceScreen(
             CenterAlignedTopAppBar(
                 title = { Text(tld.suffix, color = colors.textPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBackIosNew, "Back", tint = LocalAppColors.current.textPrimary) }
+                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBackIosNew, tr(R.string.kp_back_b52b3), tint = LocalAppColors.current.textPrimary) }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background)
             )

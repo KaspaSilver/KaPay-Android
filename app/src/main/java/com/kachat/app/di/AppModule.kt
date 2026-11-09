@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.kachat.app.BuildConfig
 import com.kachat.app.util.ApiLogging
+import com.kachat.app.util.forLog
+import com.kachat.app.util.redactingAddressesForLog
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
@@ -88,7 +90,22 @@ object AppModule {
         //    release build (logcat is readable by anything with log access on a rooted device,
         //    or captured in bug reports), so release verbose logging caps at BASIC (one line per
         //    request/response, no bodies).
-        val verboseLogger = HttpLoggingInterceptor().apply {
+        //
+        // Every line here leaves out the wallet's addresses: REST paths and queries carry them,
+        // and the diagnostics export bundles logcat. URLs go through HttpUrl.forLog (addresses
+        // cut to their last 8 characters, no query string) and the verbose logger's lines are
+        // redacted the same way.
+        val verboseLogger = HttpLoggingInterceptor(object : HttpLoggingInterceptor.Logger {
+            override fun log(message: String) {
+                val line = message.redactingAddressesForLog()
+                // Request/response lines ("--> GET https://...", "<-- 200 https://...") lose
+                // their query string; body lines keep their text.
+                val logged = if (line.startsWith("-->") || line.startsWith("<--")) {
+                    line.replace(Regex("\\?[^\\s]*"), "?…")
+                } else line
+                Log.i("OkHttp", logged)
+            }
+        }).apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.BASIC
         }
         return OkHttpClient.Builder()
@@ -102,14 +119,14 @@ object AppModule {
                     chain.proceed(request)
                 } catch (e: Exception) {
                     val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
-                    Log.w(API_LOG_TAG, "FAIL ${request.method} ${request.url} after ${elapsedMs}ms: $e")
+                    Log.w(API_LOG_TAG, "FAIL ${request.method} ${request.url.forLog()} after ${elapsedMs}ms: ${e.toString().redactingAddressesForLog()}")
                     throw e
                 }
                 val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
                 if (!response.isSuccessful) {
-                    Log.w(API_LOG_TAG, "HTTP ${response.code} ${request.method} ${request.url} in ${elapsedMs}ms")
+                    Log.w(API_LOG_TAG, "HTTP ${response.code} ${request.method} ${request.url.forLog()} in ${elapsedMs}ms")
                 } else if (elapsedMs > SLOW_REQUEST_THRESHOLD_MS) {
-                    Log.w(API_LOG_TAG, "SLOW ${request.method} ${request.url} took ${elapsedMs}ms")
+                    Log.w(API_LOG_TAG, "SLOW ${request.method} ${request.url.forLog()} took ${elapsedMs}ms")
                 }
                 response
             }
@@ -128,7 +145,7 @@ object AppModule {
                     ?.let { it * 1000L }
                     ?.coerceIn(500L, MAX_RATE_LIMIT_WAIT_MS)
                     ?: DEFAULT_RATE_LIMIT_WAIT_MS
-                Log.w(API_LOG_TAG, "HTTP 429 ${request.url} - retrying once in ${retryAfterMs}ms")
+                Log.w(API_LOG_TAG, "HTTP 429 ${request.url.forLog()} - retrying once in ${retryAfterMs}ms")
                 response.close()
                 try {
                     Thread.sleep(retryAfterMs)

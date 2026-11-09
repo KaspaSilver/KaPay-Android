@@ -31,8 +31,6 @@ import kotlinx.coroutines.flow.flowOf
 import retrofit2.HttpException
 import java.io.File
 import java.text.SimpleDateFormat
-import java.time.Instant
-import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -932,10 +930,10 @@ class PortfolioRepository @Inject constructor(
      * separate line item; any fee captured at import time is already folded into Total value
      * (USD).
      *
-     * The file is named after the portfolio as named in the app ("Long Term 2026-10-08T18-37-50Z
-     * .csv", [baseName] from [exportBaseName]), so it is recognizable in Files and Nextcloud
-     * (iOS 87b2a0b). The time is ISO 8601 in whole seconds with ':' as '-', as iOS writes it.
-     * Every row also carries [portfolioName] in a last `Portfolio` column (iOS wallet 59593af).
+     * The file is named after the portfolio as named in the app ("Long Term.csv", [baseName] from
+     * [exportBaseName]), so each portfolio has its own file, recognizable in Files and Nextcloud
+     * (iOS 953b255). Every row also carries [portfolioName] in a last `Portfolio` column (iOS
+     * wallet 59593af).
      */
     fun exportCsv(
         transactions: List<PortfolioTransactionEntity>,
@@ -943,9 +941,7 @@ class PortfolioRepository @Inject constructor(
         portfolioName: String = "",
     ): Uri {
         val exportDir = File(context.cacheDir, "portfolio_exports").apply { mkdirs() }
-        val fileTimestamp = DateTimeFormatter.ISO_INSTANT
-            .format(Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS)).replace(":", "-")
-        val csvFile = File(exportDir, "$baseName $fileTimestamp.csv")
+        val csvFile = File(exportDir, "$baseName.csv")
 
         val dateFormat = makeDateFormat(TimeZone.getTimeZone("UTC"))
         val quotedName = portfolioName.replace("\"", "\"\"")
@@ -971,9 +967,10 @@ class PortfolioRepository @Inject constructor(
      * are malformed rows and unsupported Type values (only buy/sell are tracked). Fee is folded
      * into Total value (USD) when the fee is itself denominated in USD — added for buys,
      * subtracted for sells — since the ledger doesn't track fee as a separate line item. A row
-     * whose timestamp exactly matches an existing transaction replaces it in place (same id, new
-     * data) rather than adding a duplicate — re-importing a corrected or re-exported CSV updates
-     * the ledger instead of piling up copies.
+     * in the same second as a transaction the portfolio already had replaces it in place (same id,
+     * time and source, new data), each existing transaction at most once, rather than adding a
+     * duplicate — re-importing a corrected or re-exported CSV updates the ledger instead of piling
+     * up copies; rows of the file itself never replace each other.
      *
      * Which portfolio (iOS wallet 59593af): a row's `Portfolio` column (an export from here)
      * names it. The portfolio of that name is used (any case), else this wallet's untouched
@@ -986,7 +983,10 @@ class PortfolioRepository @Inject constructor(
      */
     suspend fun importCsv(uri: Uri): CsvImportResult {
         val activePortfolioId = currentPortfolioId() ?: return CsvImportResult()
-        val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText() ?: return CsvImportResult()
+        // file I/O off the main thread (the caller is viewModelScope)
+        val content = withContext(Dispatchers.IO) {
+            context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+        } ?: return CsvImportResult()
         // Whole records, not lines: a note can hold line breaks, which the export writes inside
         // its quotes. Splitting the file on every newline first cut such a row in two (iOS 98f5009).
         val records = parseCsvRecords(content).toMutableList()
@@ -1011,8 +1011,16 @@ class PortfolioRepository @Inject constructor(
         }
 
         val existing = database.portfolioDao().getAllTransactionsForWallet(walletAddress).first()
-        val idByTimestamp = HashMap<String, MutableMap<Long, String>>()
-        for (tx in existing) idByTimestamp.getOrPut(tx.portfolioId) { HashMap() }[tx.timestampMillis] = tx.id
+        // A row in the file replaces a row this portfolio already had at that time - on the second,
+        // since the export writes whole seconds and rows from an address import or Add to Portfolio
+        // carry milliseconds. Only rows from before this import, each at most once: two rows of the
+        // same second in the file are two transactions (iOS 1652437). Each holds (id, timestamp).
+        val rowsBySecond = HashMap<String, MutableMap<Long, MutableList<Pair<String, Long>>>>()
+        for (tx in existing) {
+            rowsBySecond.getOrPut(tx.portfolioId) { HashMap() }
+                .getOrPut(Math.floorDiv(tx.timestampMillis, 1000L)) { mutableListOf() }
+                .add(tx.id to tx.timestampMillis)
+        }
 
         var imported = 0
         val targets = mutableListOf<String>()
@@ -1054,10 +1062,10 @@ class PortfolioRepository @Inject constructor(
             val portfolioId = target(fields)
             if (portfolioId !in targets) targets.add(portfolioId)
 
-            val byTimestamp = idByTimestamp.getOrPut(portfolioId) { HashMap() }
-            val existingId = byTimestamp[timestampMillis]
-            if (existingId != null) {
-                updateTransaction(existingId, type, amountSompi, fiatValue, timestampMillis, notes)
+            val match = rowsBySecond[portfolioId]?.get(Math.floorDiv(timestampMillis, 1000L))?.removeFirstOrNull()
+            if (match != null) {
+                // the row keeps its own time (and source), to the millisecond
+                updateTransaction(match.first, type, amountSompi, fiatValue, match.second, notes)
             } else {
                 val newId = UUID.randomUUID().toString()
                 ledgerStore.saveTransaction(
@@ -1072,7 +1080,6 @@ class PortfolioRepository @Inject constructor(
                         notes = notes
                     )
                 )
-                byTimestamp[timestampMillis] = newId
             }
             imported++
         }
@@ -1131,14 +1138,14 @@ class PortfolioRepository @Inject constructor(
     }
 
     companion object {
-        /** The CSV export's name when the portfolio has none (iOS 87b2a0b; "KaPay", iOS 5bab351). */
-        const val DEFAULT_EXPORT_NAME = "KaPay Portfolio"
+        /** The CSV export's name when the portfolio has none (iOS 953b255). */
+        const val DEFAULT_EXPORT_NAME = "Portfolio"
 
         /**
-         * The export's file name: the name given to the portfolio in the app, so it is
-         * recognizable in Files and Nextcloud; [DEFAULT_EXPORT_NAME] if it has none. Characters a
-         * file name can't hold are dropped; at most 60 characters (iOS
-         * `PortfolioViewModel.exportBaseName`, 87b2a0b).
+         * The export's file name: the name given to the portfolio in the app ("Long Term.csv"), so
+         * each portfolio has its own file, recognizable in Files and Nextcloud; [DEFAULT_EXPORT_NAME]
+         * if it has none. Characters a file name can't hold are dropped; at most 60 characters (iOS
+         * `PortfolioViewModel.exportBaseName`, 953b255).
          */
         fun exportBaseName(portfolioName: String?): String {
             val cleaned = portfolioName.orEmpty()

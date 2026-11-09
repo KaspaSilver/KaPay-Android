@@ -30,13 +30,16 @@ class KaspaWalletEngineTest {
     }
 
     @Test
-    fun `pending spend tracking is dropped once the fresh fetch no longer contains it`() {
-        val pendingSpent = mutableSetOf("gone-tx:0")
-        val fresh = listOf(utxo("other-tx", 0)) // "gone-tx:0" isn't in the fresh list anymore
+    fun `pending spend stays out after one fetch stops listing it, for a lagging fetch after`() {
+        // iOS 0799cec: the hold runs its full time (the engine's TTL), not until one fetch drops it.
+        val gone = utxo("gone-tx", 0)
+        val pendingSpent = mutableSetOf(KaspaWalletEngine.outpointKey(gone.outpoint))
 
-        KaspaWalletEngine.reconcilePendingUtxos(fresh, pendingSpent, mutableListOf())
+        KaspaWalletEngine.reconcilePendingUtxos(listOf(utxo("other-tx", 0)), pendingSpent, mutableListOf())
+        val lagging = KaspaWalletEngine.reconcilePendingUtxos(listOf(gone, utxo("other-tx", 0)), pendingSpent, mutableListOf())
 
-        assertTrue(pendingSpent.isEmpty())
+        assertTrue(KaspaWalletEngine.outpointKey(gone.outpoint) in pendingSpent)
+        assertEquals(listOf("other-tx"), lagging.map { it.outpoint.transactionId })
     }
 
     @Test

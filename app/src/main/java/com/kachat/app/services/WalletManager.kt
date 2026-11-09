@@ -3,8 +3,6 @@ package com.kachat.app.services
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.kachat.app.models.WalletSourceFamily
@@ -100,6 +98,7 @@ class WalletManager @Inject constructor(
         private const val SECURE_PREFS_NAME = "kachat_secure_prefs"
         private const val PREF_ACCOUNTS = "accounts"
         private const val PREF_ACTIVE_ADDRESS = "active_address"
+        private const val PREF_LOGGED_OUT = "logged_out"
         private const val PREF_HIDDEN_SPENDING_ADDRESSES = "hidden_spending_addresses"
         private const val PREF_SPENDING_ADDRESS_LABELS = "spending_address_labels"
         private const val PREF_SPENDING_UTXO_LABELS = "spending_utxo_labels"
@@ -131,11 +130,15 @@ class WalletManager @Inject constructor(
 
         fun isQuantumIndex(index: Int): Boolean = index >= QUANTUM_INDEX_BASE
 
-        /** A spending row's number on its own chain, both named "Address #n" - quantum numbering
-         *  starts at 0 again; the shield is what tells the chains apart (iOS
-         *  `SpendingAddressEntry.displayTitle`, English like iOS). */
-        fun spendingAddressTitle(index: Int): String =
-            "Address #${if (isQuantumIndex(index)) index - QUANTUM_INDEX_BASE else index}"
+        /** The number people see for a spending address. The Chatting Address is #0, so the legacy
+         *  chain's first slot shows as #1; the quantum chain has no chatting address and starts at
+         *  #0 (iOS 953b255 `addressNumber`). */
+        fun addressNumber(index: Int): Int =
+            if (isQuantumIndex(index)) index - QUANTUM_INDEX_BASE else index + 1
+
+        /** A spending row's number on its own chain, both named "Address #n" - the shield is what
+         *  tells the chains apart (iOS `SpendingAddressEntry.displayTitle`, English like iOS). */
+        fun spendingAddressTitle(index: Int): String = "Address #${addressNumber(index)}"
 
         /**
          * The legacy chain's revealed bound: the stored max, widened by the primary only while the
@@ -412,24 +415,22 @@ class WalletManager @Inject constructor(
 
     /** Stamps [address]'s added-on date if it has none yet. Idempotent. */
     private fun stampAccountAddedAt(address: String) {
-        if (sharedPrefs.contains(addedAtKey(address))) return
+        // the same account on the other network already has its date (iOS 1652437 `isSameAccount`)
+        if (com.kachat.app.util.KaspaNetwork.accountAddressVariants(address).any { sharedPrefs.contains(addedAtKey(it)) }) return
         sharedPrefs.edit().putLong(addedAtKey(address), System.currentTimeMillis()).apply()
     }
 
     /** Epoch millis this account was added, or null for one that predates the stamp. */
     fun accountAddedAt(address: String): Long? =
-        sharedPrefs.getLong(addedAtKey(address), 0L).takeIf { it > 0L }
+        com.kachat.app.util.KaspaNetwork.accountAddressVariants(address)
+            .firstNotNullOfOrNull { variant -> sharedPrefs.getLong(addedAtKey(variant), 0L).takeIf { it > 0L } }
 
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val sharedPrefs = EncryptedSharedPreferences.create(
+    // A file this phone can't open (brought from another phone, or damaged) is set aside and the
+    // store starts empty, so the app opens on sign-in instead of closing at every launch.
+    private val sharedPrefs = com.kachat.app.util.StartupSafety.encryptedPrefsMovingAsideUnreadable(
         context,
         SECURE_PREFS_NAME,
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        "WalletManager"
     )
 
     /**
@@ -451,6 +452,14 @@ class WalletManager @Inject constructor(
      * Invalidated by [saveAccounts] and [wipe], which are the only two things that write it.
      */
     @Volatile private var accountsCache: List<Account>? = null
+
+    /**
+     * Held around every read-then-write of the account list: a create runs on
+     * Dispatchers.Default while address discovery and sends write from Main and IO, and two
+     * unserialized writers each saved the list they read, losing the other's change. Taken after
+     * [spendingIndexAllocationLock] where both are held, never before it.
+     */
+    private val accountsWriteLock = Any()
 
     init {
         stampLegacyPassphraseForms()
@@ -609,8 +618,13 @@ class WalletManager @Inject constructor(
         refreshPrimarySpendingIndexFlow()
     }
 
+    /**
+     * The signed-in account, or null when none is: no first-account fallback, since the active
+     * address is only missing after the active account was deleted, and handing the phone to the
+     * next saved account then skipped its sign-in (iOS has no current wallet after deleteWallet).
+     */
     fun getActiveAccount(): Account? {
-        val address = sharedPrefs.getString(PREF_ACTIVE_ADDRESS, null) ?: return getAccounts().firstOrNull()
+        val address = sharedPrefs.getString(PREF_ACTIVE_ADDRESS, null) ?: return null
         // Matched by key, not by string: the stored active address may be the other network's
         // encoding (iOS isSameAccount, 741c005).
         return getAccounts().find { com.kachat.app.util.KaspaNetwork.isSameAccount(it.address, address) }
@@ -727,9 +741,9 @@ class WalletManager @Inject constructor(
      * (which changes the derived address) be known before we ever derive or save, so there is no
      * throwaway account to migrate afterwards.
      */
-    fun generateMnemonic(wordCount: Int = 12): List<String> {
-        val entropySize = if (wordCount == 24) 32 else 16
-        val entropy = ByteArray(entropySize)
+    fun generateMnemonic(): List<String> {
+        // 24 words: 12-word creation is gone, import still takes either (iOS 99ab88a).
+        val entropy = ByteArray(32)
         SecureRandom().nextBytes(entropy)
         return MnemonicCode.INSTANCE.toMnemonic(entropy)
     }
@@ -738,38 +752,66 @@ class WalletManager @Inject constructor(
      * Commits a wallet generated by [generateMnemonic]: derives the address using the optional
      * BIP39 [passphrase], persists the account (with the passphrase), and makes it active. Pass
      * "" for no passphrase.
+     *
+     * [beforeSaving] gets the new address just before its keys are saved: the account is marked
+     * as owing its backup there, so an app killed mid-create can't leave an account that is never
+     * owed it (iOS 0799cec `owesBackup`).
      */
-    fun commitCreatedWallet(name: String, mnemonic: List<String>, passphrase: String = "") {
+    fun commitCreatedWallet(
+        name: String,
+        mnemonic: List<String>,
+        passphrase: String = "",
+        beforeSaving: (address: String) -> Unit = {},
+    ) {
         // A freshly created wallet is by definition a KaChat wallet: standard family, index 0.
         val address = deriveIdentityAddress(mnemonic, passphrase, WalletSourceFamily.KASPA_STANDARD, 0)
-        // The accounts already here must be kept before the list is rewritten (IOS-016).
-        val previous = accountsForReplacingWrite()
-        val accounts = previous.toMutableList()
-        // Stored in NFKD with the "nfkd" flag, as Desktop stores it (audit XP-013).
-        accounts.add(
-            Account(
-                name,
-                address,
-                mnemonic.joinToString(" "),
-                passphrase = nfkd(passphrase),
-                passphraseForm = PassphraseForm.NFKD.stored
+        synchronized(accountsWriteLock) {
+            // The accounts already here must be kept before the list is rewritten (IOS-016).
+            val previous = accountsForReplacingWrite()
+            beforeSaving(address)
+            val accounts = previous.toMutableList()
+            // Stored in NFKD with the "nfkd" flag, as Desktop stores it (audit XP-013).
+            accounts.add(
+                Account(
+                    name,
+                    address,
+                    mnemonic.joinToString(" "),
+                    passphrase = nfkd(passphrase),
+                    passphraseForm = PassphraseForm.NFKD.stored
+                )
             )
-        )
-        saveAccountsKeepingExisting(accounts, previous, address)
+            saveAccountsKeepingExisting(accounts, previous, address)
+        }
         stampAccountAddedAt(address)
         setActiveAccount(address)
     }
 
     /**
-     * Generate + commit in one shot with no passphrase. Retained for any non-interactive caller;
-     * the onboarding UI uses [generateMnemonic]/[commitCreatedWallet] separately so it can insert
-     * the passphrase step in between.
+     * The name a new account gets, renameable later: "My Account", then "My Account 2" and on,
+     * skipping any name a saved account already has (iOS 99ab88a `nextDefaultAccountName`).
      */
-    fun createWallet(name: String, wordCount: Int = 12): List<String> {
-        val words = generateMnemonic(wordCount)
-        commitCreatedWallet(name, words, "")
-        return words
+    fun nextDefaultAccountName(): String {
+        val base = "My Account"
+        val taken = getAccounts().map { it.name.trim().lowercase() }.toSet()
+        if (base.lowercase() !in taken) return base
+        var number = 2
+        while ("$base $number".lowercase() in taken) number++
+        return "$base $number"
     }
+
+    /** Log Out was the last thing done, so a cold start stays on the sign-in screen (iOS
+     *  `logoutFlagKey`); its biometric gate is what stands in front of the saved accounts. */
+    var isLoggedOut: Boolean
+        get() = sharedPrefs.getBoolean(PREF_LOGGED_OUT, false)
+        set(value) {
+            sharedPrefs.edit().putBoolean(PREF_LOGGED_OUT, value).apply()
+            _loggedOut.value = value
+        }
+
+    private val _loggedOut = MutableStateFlow(sharedPrefs.getBoolean(PREF_LOGGED_OUT, false))
+    /** [isLoggedOut] as a flow, so what runs only while signed in (the live UTXO subscription)
+     *  stops at Log Out: the active address doesn't change then. */
+    val loggedOutFlow: StateFlow<Boolean> = _loggedOut.asStateFlow()
 
     /** BIP39 checksum/wordlist validity — true if [mnemonic] is a well-formed phrase. */
     fun isValidMnemonic(mnemonic: List<String>): Boolean = try {
@@ -822,26 +864,30 @@ class WalletManager @Inject constructor(
         // The accounts already here must be kept before the list is rewritten: an unreadable
         // stored list, or a write that doesn't read back with them intact, stops the import with
         // nothing changed (iOS 9758568, IOS-016). Re-importing the same account is not a loss.
-        val previous = accountsForReplacingWrite()
-        val existing = previous.firstOrNull { it.address == address }
-        val accounts = previous.filter { it.address != address }.toMutableList()
-        accounts.add(
-            0,
-            Account(
-                name = name,
-                address = address,
-                mnemonic = mnemonic.joinToString(" "),
-                spendingAddressIndex = existing?.spendingAddressIndex ?: 0,
-                maxSpendingAddressIndex = existing?.maxSpendingAddressIndex ?: 0,
-                maxQuantumAddressIndex = existing?.maxQuantumAddressIndex,
-                // Stored in NFKD with the "nfkd" flag, as Desktop stores it (audit XP-013).
-                passphrase = nfkd(passphrase),
-                sourceFamily = family.name,
-                chattingAddressIndex = chattingAddressIndex,
-                passphraseForm = PassphraseForm.NFKD.stored
+        synchronized(accountsWriteLock) {
+            val previous = accountsForReplacingWrite()
+            // Compared as an account: the same words on the other network are the same account,
+            // and keep its spending state (iOS 1652437 `isSameAccount` in importWallet).
+            val existing = previous.firstOrNull { com.kachat.app.util.KaspaNetwork.isSameAccount(it.address, address) }
+            val accounts = previous.filterNot { com.kachat.app.util.KaspaNetwork.isSameAccount(it.address, address) }.toMutableList()
+            accounts.add(
+                0,
+                Account(
+                    name = name,
+                    address = address,
+                    mnemonic = mnemonic.joinToString(" "),
+                    spendingAddressIndex = existing?.spendingAddressIndex ?: 0,
+                    maxSpendingAddressIndex = existing?.maxSpendingAddressIndex ?: 0,
+                    maxQuantumAddressIndex = existing?.maxQuantumAddressIndex,
+                    // Stored in NFKD with the "nfkd" flag, as Desktop stores it (audit XP-013).
+                    passphrase = nfkd(passphrase),
+                    sourceFamily = family.name,
+                    chattingAddressIndex = chattingAddressIndex,
+                    passphraseForm = PassphraseForm.NFKD.stored
+                )
             )
-        )
-        saveAccountsKeepingExisting(accounts, previous, address)
+            saveAccountsKeepingExisting(accounts, previous, address)
+        }
         // Only if this address has never been seen here - re-importing a seed already on the
         // device is not the account arriving again.
         stampAccountAddedAt(address)
@@ -864,13 +910,54 @@ class WalletManager @Inject constructor(
      * Deletes a specific account.
      */
     fun deleteAccount(address: String) {
-        val accounts = getAccounts().filterNot { com.kachat.app.util.KaspaNetwork.isSameAccount(it.address, address) }
-        saveAccounts(accounts)
+        val accounts = synchronized(accountsWriteLock) {
+            getAccounts().filterNot { com.kachat.app.util.KaspaNetwork.isSameAccount(it.address, address) }
+                .also { saveAccounts(it) }
+        }
+        removeSpendingData(address)
         val active = sharedPrefs.getString(PREF_ACTIVE_ADDRESS, null)
         if (active != null && com.kachat.app.util.KaspaNetwork.isSameAccount(active, address)) {
+            // No account is active now, even with others saved: they're signed in to from the
+            // sign-in screen, behind its biometric gate (iOS deleteWallet).
             sharedPrefs.edit().remove(PREF_ACTIVE_ADDRESS).apply()
+            if (accounts.isNotEmpty()) isLoggedOut = true
         }
         refreshActiveAddressFlow()
+    }
+
+    /**
+     * What this store keeps for one account besides its record, for its removal (iOS 1652437
+     * `removeSpendingData`), on both networks' encodings: each derived spending address's coin
+     * labels, the derived-address cache, the hidden set, address labels, the Receive QR's index,
+     * the Manage Addresses snapshot and when it was added. The used and quantum-spent sets stay: they describe addresses
+     * on chain, not the account, and a re-import must still know them.
+     */
+    private fun removeSpendingData(address: String) {
+        try {
+            removeSpendingDataOrThrow(address)
+        } catch (e: Exception) {
+            // a store that can't be parsed never stops the removal itself
+            android.util.Log.w("WalletManager", "Spending data of a removed account not cleared", e)
+        }
+    }
+
+    private fun removeSpendingDataOrThrow(address: String) {
+        val variants = com.kachat.app.util.KaspaNetwork.accountAddressVariants(address).toSet()
+        val cached = getAllCachedSpendingAddresses()
+        val derived = cached.filter { it.walletAddress in variants }.map { it.address }.toSet()
+        val keptCache = cached.filterNot { it.walletAddress in variants }
+        spendingAddressCacheMemo = keptCache
+        val editor = sharedPrefs.edit()
+            .putString(PREF_SPENDING_ADDRESS_CACHE, gson.toJson(keptCache))
+            .putString(PREF_HIDDEN_SPENDING_ADDRESSES, gson.toJson(getAllHiddenSpendingAddresses().filterNot { it.walletAddress in variants }))
+            .putString(PREF_SPENDING_ADDRESS_LABELS, gson.toJson(getAllSpendingAddressLabels().filterNot { it.walletAddress in variants }))
+            .putString(PREF_SPENDING_UTXO_LABELS, gson.toJson(getAllSpendingUtxoLabels().filterNot { it.address in derived }))
+        for (variant in variants) {
+            editor.remove("receive_index_$variant")
+            editor.remove("${PREF_MANAGE_ADDRESSES_SNAPSHOT}_$variant")
+            editor.remove(addedAtKey(variant))
+        }
+        editor.apply()
     }
 
     // --- Identity (chatting) derivation, family-aware -----------------------------------------
@@ -1008,6 +1095,25 @@ class WalletManager @Inject constructor(
         null
     }
 
+    /** The identity-chain addresses at [indices] of a seed with no account yet, for an import's
+     *  passphrase step (iOS 4f5dfd2 `findChattingAddresses`). One base node, so 50 cost about what
+     *  one does. Empty when the words aren't usable. */
+    fun previewIdentityAddresses(
+        mnemonic: List<String>,
+        passphrase: String,
+        family: WalletSourceFamily,
+        indices: IntRange,
+    ): List<Pair<Int, String>> {
+        val baseNode = try {
+            identityBaseNode(mnemonic, passphrase, family)
+        } catch (e: Exception) {
+            return emptyList()
+        }
+        return indices.mapNotNull { index ->
+            identityPrivateKeyBytes(baseNode, index, family)?.let { index to addressFromPrivateKeyBytes(it) }
+        }
+    }
+
     private fun deriveIdentityAddress(
         mnemonic: List<String>,
         passphrase: String,
@@ -1075,8 +1181,14 @@ class WalletManager @Inject constructor(
 
     /** Renames a saved account in place — used from the Profile screen's editable account name. */
     fun renameAccount(address: String, newName: String) {
-        val accounts = getAccounts().map { if (it.address == address) it.copy(name = newName) else it }
-        saveAccounts(accounts)
+        // Matched by key, not by string: the address passed in may be the other network's
+        // encoding, and a string miss saved the list with the old name (iOS 0799cec).
+        synchronized(accountsWriteLock) {
+            val accounts = getAccounts().map {
+                if (com.kachat.app.util.KaspaNetwork.isSameAccount(it.address, address)) it.copy(name = newName) else it
+            }
+            saveAccounts(accounts)
+        }
     }
 
     fun getActiveMnemonic(): String? {
@@ -1098,8 +1210,12 @@ class WalletManager @Inject constructor(
      * stored address. Every identity consumer (handshakes, ECIES, deterministic aliases, message
      * signing) funnels through here.
      */
-    fun getPrivateKeyBytes(): ByteArray {
-        val account = getActiveAccount() ?: throw IllegalStateException("No active account")
+    fun getPrivateKeyBytes(): ByteArray =
+        identityPrivateKeyBytesFor(getActiveAccount() ?: throw IllegalStateException("No active account"))
+
+    /** [getPrivateKeyBytes] for an [account] record captured earlier: push's unregister takes the
+     *  record before a delete removes it and derives (PBKDF2) off the main thread. */
+    fun identityPrivateKeyBytesFor(account: Account): ByteArray {
         val mnemonic = account.mnemonic.split(" ")
         val family = WalletSourceFamily.fromRaw(account.sourceFamily)
         val baseNode = identityBaseNode(mnemonic, account.passphrase ?: "", family, passphraseFormOf(account))
@@ -1199,7 +1315,7 @@ class WalletManager @Inject constructor(
 
     /** Raises [walletAddress]'s quantum bound to [quantumIndex] (chain index, not public). Only
      *  ever grows. */
-    fun ensureMaxQuantumAddressIndexAtLeast(walletAddress: String, quantumIndex: Int) {
+    fun ensureMaxQuantumAddressIndexAtLeast(walletAddress: String, quantumIndex: Int) = synchronized(accountsWriteLock) {
         val accounts = getAccounts().map {
             if (it.address == walletAddress && quantumIndex > maxQuantumIndex(it)) it.copy(maxQuantumAddressIndex = quantumIndex) else it
         }
@@ -1211,8 +1327,15 @@ class WalletManager @Inject constructor(
      *  slot a send still in flight picked for its change ([pickFreshQuantumChange]), so nothing
      *  else is handed the same one before that send reveals it. */
     fun nextFreshQuantumIndex(): Int = synchronized(spendingIndexAllocationLock) {
-        nextFreshQuantumIndex(maxQuantumAddressIndex(), getActiveAccount()?.let { pendingQuantumChange[it.address] }.orEmpty())
+        nextFreshQuantumIndex(maxQuantumAddressIndex(), getActiveAccount()?.let { takenQuantumSlots(it.address) }.orEmpty())
     }
+
+    /** The quantum slots (public index) a fresh allocation on [owner] goes past: what its sends in
+     *  flight picked for their change, and the slot its Receive QR already points at, warmed
+     *  before it's on the list, which stays the QR's (iOS 2da5f4b). Call it under
+     *  [spendingIndexAllocationLock]. */
+    private fun takenQuantumSlots(owner: String): Set<Int> =
+        pendingQuantumChange[owner].orEmpty() + listOfNotNull(getReceiveAddressIndex(owner)?.takeIf { isQuantumIndex(it) })
 
     /**
      * Checks the fresh quantum slot on chain before it is handed out (iOS
@@ -1252,7 +1375,7 @@ class WalletManager @Inject constructor(
 
     /** [nextFreshQuantumIndex] for [account], whichever account is active. */
     private fun nextFreshQuantumIndex(account: SpendingSweepAccount): Int = synchronized(spendingIndexAllocationLock) {
-        nextFreshQuantumIndex(sweepAccountRecord(account)?.let { maxQuantumIndex(it) } ?: -1, pendingQuantumChange[account.owner].orEmpty())
+        nextFreshQuantumIndex(sweepAccountRecord(account)?.let { maxQuantumIndex(it) } ?: -1, takenQuantumSlots(account.owner))
     }
 
     /** Raises [account]'s quantum bound past used public [index] (iOS
@@ -1263,7 +1386,7 @@ class WalletManager @Inject constructor(
         val record = sweepAccountRecord(account) ?: return@synchronized false
         android.util.Log.i("WalletManager", "Quantum slot ${index - QUANTUM_INDEX_BASE} already has history - skipping it")
         val revealedMax = maxQuantumIndex(record)
-        pendingQuantumChange[record.address].orEmpty()
+        takenQuantumSlots(record.address)
             .filter { it - QUANTUM_INDEX_BASE > revealedMax && it < index }
             .forEach { setSpendingAddressHidden(record.address, it, true) }
         ensureMaxQuantumAddressIndexAtLeast(record.address, index - QUANTUM_INDEX_BASE)
@@ -1291,7 +1414,7 @@ class WalletManager @Inject constructor(
     fun generateNextQuantumAddress(walletAddress: String): Int = synchronized(spendingIndexAllocationLock) {
         val account = getAccounts().firstOrNull { it.address == walletAddress } ?: getActiveAccount()
         val revealedMax = account?.let { maxQuantumIndex(it) } ?: -1
-        val inFlight = pendingQuantumChange[walletAddress].orEmpty()
+        val inFlight = takenQuantumSlots(walletAddress)
         val index = nextFreshQuantumIndex(revealedMax, inFlight)
         inFlight.filter { it - QUANTUM_INDEX_BASE > revealedMax }
             .forEach { setSpendingAddressHidden(walletAddress, it, true) }
@@ -1597,7 +1720,7 @@ class WalletManager @Inject constructor(
      */
     fun pickFreshQuantumChange(account: SpendingSweepAccount): QuantumChangePick? = synchronized(spendingIndexAllocationLock) {
         val revealedMax = sweepAccountRecord(account)?.let { maxQuantumIndex(it) }
-        val index = freshQuantumAllocation(revealedMax, pendingQuantumChange[account.owner].orEmpty(), 1)?.single()
+        val index = freshQuantumAllocation(revealedMax, takenQuantumSlots(account.owner), 1)?.single()
             ?: return@synchronized null
         val address = deriveSpendingAddresses(listOf(index), account)[index] ?: return@synchronized null
         pendingQuantumChange.getOrPut(account.owner) { HashSet() }.add(index)
@@ -1653,10 +1776,15 @@ class WalletManager @Inject constructor(
      * writing nothing, once [owner] has been removed.
      */
     fun revealSpendingAddress(owner: String, index: Int): Boolean = synchronized(spendingIndexAllocationLock) {
-        val accounts = getAccounts()
-        val stored = accounts.find { it.address == owner }
-        val (record, hidden) = spendingReveal(stored, getHiddenSpendingIndices(owner), index) ?: return@synchronized false
-        if (record != stored) saveAccounts(accounts.map { if (it.address == owner) record else it })
+        val hidden: Set<Int> = synchronized(accountsWriteLock) {
+            val accounts = getAccounts()
+            val stored = accounts.find { it.address == owner }
+            val revealed = spendingReveal(stored, getHiddenSpendingIndices(owner), index)
+            if (revealed != null && revealed.first != stored) {
+                saveAccounts(accounts.map { if (it.address == owner) revealed.first else it })
+            }
+            revealed?.second
+        } ?: return@synchronized false
         setSpendingAddressesHidden(owner, hidden)
         true
     }
@@ -1679,7 +1807,7 @@ class WalletManager @Inject constructor(
         // fb2323e, IOS-109 / AND-056 follow-up)
         val record = sweepAccountRecord(account) ?: return@synchronized emptyList()
         val revealedMax = maxQuantumIndex(record)
-        val inFlight = pendingQuantumChange[account.owner].orEmpty()
+        val inFlight = takenQuantumSlots(account.owner)
         // past any slot a send in flight picked for its change, too - kept hidden as the bound
         // passes it, as a reveal past it would; its send lists it if it goes through
         val indices = freshQuantumAllocation(revealedMax, inFlight, count) ?: return@synchronized emptyList()
@@ -1703,7 +1831,7 @@ class WalletManager @Inject constructor(
      */
     fun nextFreshSpendingAddress(account: SpendingSweepAccount): String? {
         val index = synchronized(spendingIndexAllocationLock) {
-            freshQuantumAllocation(sweepAccountRecord(account)?.let { maxQuantumIndex(it) }, pendingQuantumChange[account.owner].orEmpty(), 1)?.single()
+            freshQuantumAllocation(sweepAccountRecord(account)?.let { maxQuantumIndex(it) }, takenQuantumSlots(account.owner), 1)?.single()
         } ?: return null
         return deriveSpendingAddresses(listOf(index), account)[index]
     }
@@ -1737,14 +1865,14 @@ class WalletManager @Inject constructor(
      *  another is active by the time the network answers (iOS ca09dd0 `owner`, IOS-109 / AND-056).
      *  Another account's move changes nothing on screen: [primarySpendingIndexFlow] follows the
      *  active account only. False, writing nothing, once [address] has been removed. */
-    fun setSpendingAddressIndex(address: String, index: Int): Boolean {
-        val accounts = withSpendingAddressIndex(getAccounts(), address, index) ?: return false
+    fun setSpendingAddressIndex(address: String, index: Int): Boolean = synchronized(accountsWriteLock) {
+        val accounts = withSpendingAddressIndex(getAccounts(), address, index) ?: return@synchronized false
         saveAccounts(accounts)
-        return true
+        true
     }
 
     /** Derives one more spending-chain address for the Manage Addresses screen to show, without changing which one is currently active. Returns the new highest index. */
-    fun generateNextSpendingAddress(address: String): Int {
+    fun generateNextSpendingAddress(address: String): Int = synchronized(accountsWriteLock) {
         var newMax = 0
         val accounts = getAccounts().map {
             if (it.address == address) {
@@ -1753,7 +1881,7 @@ class WalletManager @Inject constructor(
             } else it
         }
         saveAccounts(accounts)
-        return newMax
+        newMax
     }
 
     /**
@@ -1762,7 +1890,7 @@ class WalletManager @Inject constructor(
      * history past what the Manage Addresses screen currently shows (e.g. KAS sent directly to
      * an address before it was ever generated locally).
      */
-    fun ensureMaxSpendingAddressIndexAtLeast(address: String, minIndex: Int) {
+    fun ensureMaxSpendingAddressIndexAtLeast(address: String, minIndex: Int) = synchronized(accountsWriteLock) {
         val accounts = getAccounts().map {
             // Legacy chain only: a quantum index here would make the legacy chain a million long.
             if (it.address == address && !isQuantumIndex(minIndex) && minIndex > it.maxSpendingAddressIndex) {
@@ -1822,11 +1950,13 @@ class WalletManager @Inject constructor(
         val switched = account.copy(address = newAddress, chattingAddressIndex = index)
         // Drop both the old entry and any pre-existing entry for the new address, then insert the
         // switched account at the top — the same "remove, re-insert at 0" shape importWallet uses.
-        val accounts = getAccounts()
-            .filter { it.address != account.address && it.address != newAddress }
-            .toMutableList()
-        accounts.add(0, switched)
-        saveAccounts(accounts)
+        synchronized(accountsWriteLock) {
+            val accounts = getAccounts()
+                .filter { it.address != account.address && it.address != newAddress }
+                .toMutableList()
+            accounts.add(0, switched)
+            saveAccounts(accounts)
+        }
         setActiveAccount(newAddress)
         return newAddress
     }

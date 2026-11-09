@@ -1,5 +1,7 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
+import com.kachat.app.R
 import androidx.compose.foundation.layout.statusBars
 
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -148,9 +150,9 @@ fun AddToPortfolioSheet(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     if (selectedId == null) {
-                        Text("Add to Portfolio", color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(tr(R.string.kp_add_to_portfolio_9eb23), color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         // iOS's list section header over the portfolios.
-                        Text("Which portfolio?", color = colors.textSecondary, fontSize = 13.sp)
+                        Text(tr(R.string.kp_which_portfolio_a39e0), color = colors.textSecondary, fontSize = 13.sp)
                         // Which portfolios already hold this transaction, so the duplicate is visible
                         // while the choice is being made rather than only after it - same as iOS, and the
                         // same question the swap chooser asks.
@@ -174,13 +176,13 @@ fun AddToPortfolioSheet(
                                     Text(portfolio.name, color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
                                     when {
                                         isDuplicate -> Text(
-                                            "Already added",
+                                            tr(R.string.kp_already_added_26837),
                                             color = Color_Warning,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
                                         portfolio.id == activePortfolioId -> Text(
-                                            "Current",
+                                            tr(R.string.kp_current_4fc0e),
                                             color = KaspaTeal,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold
@@ -206,7 +208,7 @@ fun AddToPortfolioSheet(
                             SheetBarButton(stringResource(com.kachat.app.R.string.back), onClick = { selectedId = null })
                             // iOS's step-2 title (navigationTitle "Transaction Details").
                             Text(
-                                "Transaction Details",
+                                tr(R.string.kp_transaction_details_ef1f8),
                                 color = colors.textPrimary,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 17.sp,
@@ -216,7 +218,7 @@ fun AddToPortfolioSheet(
                                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
                             )
                             SheetBarButton(
-                                "Confirm",
+                                tr(R.string.kp_confirm_04a21),
                                 emphasized = true,
                                 onClick = {
                                     val finalAmount = amount ?: return@SheetBarButton
@@ -249,16 +251,16 @@ fun AddToPortfolioSheet(
                                 Icon(Icons.Default.Warning, null, tint = Color_Warning, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    "This transaction is already in $selectedName. Adding it again will double-count it.",
+                                    tr(R.string.kp_this_transaction_is_already_in_adding_c9362, selectedName),
                                     color = colors.textSecondary,
                                     fontSize = 12.sp
                                 )
                             }
                         }
 
-                        Text("Type", color = colors.textSecondary, fontSize = 12.sp)
+                        Text(tr(R.string.kp_type_3deb7), color = colors.textSecondary, fontSize = 12.sp)
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("buy" to "Buy", "sell" to "Sell", "transfer" to stringResource(com.kachat.app.R.string.portfolio_type_transfer)).forEach { (value, label) ->
+                            listOf("buy" to tr(R.string.kp_buy_7ceca), "sell" to tr(R.string.kp_sell_fa3cf), "transfer" to stringResource(com.kachat.app.R.string.portfolio_type_transfer)).forEach { (value, label) ->
                                 val active = type == value
                                 Text(
                                     text = label,
@@ -277,7 +279,7 @@ fun AddToPortfolioSheet(
                         }
 
                         // iOS's Section("Amount and price") over Amount, Price per KAS and Total.
-                        Text("Amount and price", color = colors.textSecondary, fontSize = 12.sp)
+                        Text(tr(R.string.kp_amount_and_price_08599), color = colors.textSecondary, fontSize = 12.sp)
                         com.kachat.app.ui.theme.IosTextField(
                             value = amountText,
                             // Thousands commas while shown, stored plain (iOS 40c5258).
@@ -309,12 +311,12 @@ fun AddToPortfolioSheet(
                         com.kachat.app.ui.theme.IosTextField(
                             value = notes,
                             onValueChange = { notes = it },
-                            label = { Text("Note (optional)", color = colors.textSecondary) },
+                            label = { Text(tr(R.string.kp_note_optional_4e395), color = colors.textSecondary) },
                             singleLine = false,
                             maxLines = 3,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Text("Date", color = colors.textSecondary, fontSize = 12.sp)
+                        Text(tr(R.string.kp_date_eb9a4), color = colors.textSecondary, fontSize = 12.sp)
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { showDatePicker = true },
@@ -340,7 +342,7 @@ fun AddToPortfolioSheet(
                             }
                         }
 
-                        Text("Transaction", color = colors.textSecondary, fontSize = 12.sp)
+                        Text(tr(R.string.kp_transaction_1a7b7), color = colors.textSecondary, fontSize = 12.sp)
                         Text(
                             tx.txId,
                             color = colors.textPrimary,
@@ -352,7 +354,7 @@ fun AddToPortfolioSheet(
                         Text(
                             // Recording the txid is what lets a later add of the same transaction warn
                             // instead of silently double-counting it.
-                            "Recorded with the row, so this transaction is recognised if you add it again.",
+                            tr(R.string.kp_recorded_with_the_row_so_this_5ca27),
                             color = colors.textSecondary,
                             fontSize = 11.sp
                         )
@@ -458,7 +460,7 @@ fun PortfolioAddedSnackbar(portfolioName: String, onDismiss: () -> Unit) {
                 modifier = Modifier.size(18.dp)
             )
             Spacer(Modifier.width(8.dp))
-            Text("Added to $portfolioName", color = colors.textPrimary, fontSize = 14.sp)
+            Text(tr(R.string.kp_added_to_2c931, portfolioName), color = colors.textPrimary, fontSize = 14.sp)
         }
     }
 }

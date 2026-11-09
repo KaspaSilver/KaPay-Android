@@ -84,7 +84,7 @@
     <string name="join">Gabung</string>
     <string name="join_or_create_a_channel">Gabung atau Buat Saluran</string>
     <string name="kas_2">KAS</string>
-    <string name="kns_domains">Domain KNS</string>
+    <string name="kns_domains">Domain Anda</string>
     <string name="kachat">KaChat</string>
     <string name="kachat_needs_to_connect_to_a">KaPay perlu terhubung ke sebuah node. Bagaimana Anda ingin terhubung?</string>
     <string name="kaspa_address_or_kns_domain">Alamat Kaspa atau Domain KNS</string>
@@ -145,7 +145,7 @@
     <string name="search_chats">Cari obrolan</string>
     <string name="secure_messaging_on_kaspa_blockdag">Perpesanan aman di Kaspa BlockDAG</string>
     <string name="security_warning">Peringatan Keamanan</string>
-    <string name="seed_phrase">Frasa Pemulihan</string>
+    <string name="seed_phrase">12 atau 24 Kata</string>
     <string name="send">Kirim</string>
     <string name="send_from_cold_storage">Kirim dari Penyimpanan Dingin</string>
     <string name="send_photo">Kirim Foto</string>
@@ -159,7 +159,7 @@
     <string name="status">Status</string>
     <string name="swap">Swap</string>
     <string name="swaps_are_processed_by_changenow_a">Swap diproses oleh ChangeNOW, bursa pihak ketiga. Dengan melanjutkan, Anda menyetujui Ketentuan Layanan ChangeNOW. KaChat hanya mengirimkan permintaan swap dan menampilkan statusnya; KaChat tidak bertanggung jawab atas kegagalan, keterlambatan, atau kehilangan swap. Hubungi dukungan ChangeNOW secara langsung jika terjadi masalah.</string>
-    <string name="tap_to_reveal_seed_phrase">Ketuk untuk menampilkan frasa pemulihan</string>
+    <string name="tap_to_reveal_seed_phrase">Ketuk untuk menampilkan 12 atau 24 kata Anda</string>
     <string name="this_could_take_a_few_minutes">Ini dapat memakan waktu beberapa menit saat konfirmasi di on-chain.</string>
     <string name="this_only_removes_it_from_kachat">Ini hanya menghapusnya dari daftar pantau KaPay. Tidak berpengaruh pada perangkat KasSigner atau dana yang dimilikinya.</string>
     <string name="this_removes_the_group_and_its">Ini menghapus grup dan pesannya dari perangkat ini. Ini tidak dapat dibatalkan, dan anggota lain tidak akan diberi tahu.</string>
@@ -231,7 +231,7 @@
     <string name="version">Versi</string>
     <string name="vibration">Getaran</string>
     <string name="view_profile">Lihat Profil</string>
-    <string name="view_seed_phrase">Lihat Frasa Pemulihan</string>
+    <string name="view_seed_phrase">Lihat 12 atau 24 Kata</string>
     <string name="view_in_explorer">Lihat di Penjelajah</string>
     <string name="website">Situs Web</string>
     <string name="welcome_to_kachat">Selamat Datang di KaChat</string>
@@ -376,7 +376,7 @@
     <!-- .kachat listing, buy and offer (iOS cd9e10c, 0e50fdf) -->
     <string name="kl_offers">Penawaran</string>
     <string name="kl_offer">Penawaran</string>
-    <string name="kl_offer_detail">Tentukan hargamu sendiri. KAS-mu menunggu di chain sampai penjual menerima, kamu menarik penawaran, atau penawaran kedaluwarsa - dan kamu bisa mengirim pesan ke penjual dulu.</string>
+    <string name="kl_offer_detail">Tentukan harga Anda sendiri. KAS Anda menunggu di chain sampai penjual menerima, Anda menarik penawaran, atau penawaran kedaluwarsa.</string>
     <string name="kl_listing">Daftar Jual</string>
     <string name="kl_price">Harga</string>
     <string name="kl_buy_now">Beli Sekarang</string>
@@ -855,7 +855,7 @@
     <string name="create_wallet_name_title">Buat nama untuk dompet Anda</string>
     <string name="create_wallet_name_detail">Nama ini hanya disimpan di perangkat ini, untuk membedakan dompet-dompet Anda. Tidak ada orang lain yang akan melihatnya.</string>
     <string name="create_wallet_seed_next_warning">Layar berikutnya menampilkan frasa pemulihan Anda. Ini satu-satunya cara memulihkan akun Anda: catat, simpan dengan aman, dan pastikan tidak ada yang bisa melihat layar Anda.</string>
-    <string name="choose_seed_phrase_length">Pilih panjang frasa pemulihan</string>
+    <string name="choose_seed_phrase_length">Pilih 12 atau 24 kata</string>
     <!-- Create Account, step 3: the seed phrase (iOS CreateWalletSeedStep) -->
     <string name="write_down_your_seed_phrase">Catat Frasa Pemulihan Anda</string>
     <string name="store_this_in_a_safe_place_anyone_with_these_words">Simpan ini di tempat yang aman. Siapa pun dengan kata-kata ini dapat mengakses akun Anda.</string>
@@ -903,9 +903,9 @@
     <string name="kn_commit_waiting_busy">Jaringan sedang sibuk. Komitmen Anda menunggu blok.</string>
     <string name="kn_commit_sent_again">Jaringan sedang sibuk, jadi komitmen dikirim ulang.</string>
     <!-- Onboarding: import length step and the seed phrase explainer (iOS dd0aab1) -->
-    <string name="import_seed_length_detail">Berapa jumlah kata frasa pemulihan yang Anda impor?</string>
+    <string name="import_seed_length_detail">Berapa kata yang Anda impor?</string>
     <string name="what_is_this">Apa ini?</string>
-    <string name="what_is_a_seed_phrase">Apa itu frasa pemulihan?</string>
+    <string name="what_is_a_seed_phrase">Apa itu 12 atau 24 kata saya?</string>
     <string name="seed_phrase_explainer_master_key">Frasa pemulihan adalah daftar 12 atau 24 kata biasa yang berfungsi sebagai kunci utama akun Anda. Dompet, alamat chat, dan pesan Anda semuanya berasal darinya.</string>
     <string name="seed_phrase_explainer_anyone">Siapa pun yang memiliki kata-kata ini dapat mengambil semua isi akun Anda. Jika Anda kehilangannya dan juga kehilangan perangkat ini, tidak ada yang bisa mengembalikan akun Anda, bahkan KaPay.</string>
     <string name="seed_phrase_explainer_paper">Tulis kata-katanya di kertas secara berurutan dan simpan di tempat yang aman dan pribadi. Jangan pernah mengetiknya di situs web, mengirimnya lewat chat, atau menyimpannya di tangkapan layar atau catatan cloud.</string>
@@ -921,7 +921,7 @@
     <string name="cache_web_responses">Respons web</string>
     <string name="cache_web_responses_detail">Pratinjau tautan dan respons API yang disimpan di cache jaringan sistem.</string>
     <string name="cache_temporary_files">File sementara</string>
-    <string name="cache_temporary_files_detail">File sementara dari pengiriman foto dan pesan suara. Aman dihapus kapan saja.</string>
+    <string name="cache_temporary_files_detail">File sementara yang tidak lagi diperlukan aplikasi. Aman dihapus kapan saja.</string>
     <!-- Import Account, the words screen (iOS ImportWalletView) -->
     <string name="import_words_continue">Lanjutkan</string>
     <!-- .kachat Renew: choose the period first (iOS 26bd5dc) -->
@@ -1254,4 +1254,8 @@
     <string name="fee_usd_optional">Biaya (opsional)</string>
     <string name="ab_picker_empty_body">Tambahkan kontak di Dompet > Kontak.</string>
     <string name="ab_no_contacts">Belum ada kontak</string>
+    <string name="anyone_with_your_seed_phrase_can">Siapa pun yang memiliki 12 atau 24 kata Anda dapat mengakses akun Anda. Jangan pernah membagikannya kepada siapa pun.</string>
+    <string name="where_is_this_seed_phrase_from">Dari mana 12 atau 24 kata Anda berasal?</string>
+    <string name="different_wallets_store_your_kaspa">Setiap dompet menyimpan Kaspa Anda di jalur alamat yang berbeda. Pilih asal kata-kata ini agar KaPay dapat menemukan dana dan domain Anda.</string>
+    <string name="import_words_enter_recovery_phrase">Masukkan 12 atau 24 kata Anda</string>
 </resources>

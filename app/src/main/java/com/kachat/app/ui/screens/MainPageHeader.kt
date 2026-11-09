@@ -1,5 +1,7 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
+import com.kachat.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.collectAsState
@@ -40,7 +42,7 @@ import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
 
 /**
- * The header every main page carries: the connection dot leading, the chatting-address balance
+ * The header every main page carries: the connection dot leading, the whole hot wallet's balance
  * centered, an optional trailing action - and the page's bold, left-aligned title underneath.
  *
  * On iOS `ConnectionStatusIndicator` (leading) and `BalanceToolbarLabel` (principal) are toolbar
@@ -199,6 +201,13 @@ fun MainPageHeader(
     /** The connection dot and the balance. A pushed page iOS gives only a back button and its
      *  title (Help) passes false. */
     showStatus: Boolean = true,
+    /** A pushed page iOS gives a back button and the balance (Contacts, iOS 953b255) passes false. */
+    showConnectionDot: Boolean = true,
+    /** A tap on the balance copies it (the Wallet and Settings tabs' `balanceToolbarView`). */
+    balanceCopiesOnTap: Boolean = false,
+    /** Under the balance, above the title: the dock tabs' [AccountBackupBanner] (iOS 953b255
+     *  `pinnedTabHeader`). */
+    banner: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val colors = LocalAppColors.current
@@ -222,15 +231,16 @@ fun MainPageHeader(
                     if (onBack != null && !LocalInHubSection.current) {
                         ToolbarGlassGroup {
                             // iOS 26: the chevron in the label colour, centred on its glass.
-                            ToolbarIconButton(Icons.Filled.ArrowBackIosNew, "Back", onBack, tint = LocalAppColors.current.textPrimary, iconSize = 20.dp)
+                            ToolbarIconButton(Icons.Filled.ArrowBackIosNew, tr(R.string.kp_back_b52b3), onBack, tint = LocalAppColors.current.textPrimary, iconSize = 20.dp)
                         }
                     }
-                    if (showStatus) ConnectionDotButton(onClick = { ConnectionStatusOverlayState.open() })
+                    if (showStatus && showConnectionDot) ConnectionDotButton(onClick = { ConnectionStatusOverlayState.open() })
                 }
             },
-            principal = { if (showStatus) BalanceTopBarLabel() },
+            principal = { if (showStatus) BalanceTopBarLabel(copyOnTap = balanceCopiesOnTap) },
             trailing = { ToolbarGlassGroup(content = actions) },
         )
+        banner()
         Text(
             text = title,
             color = colors.textPrimary,
@@ -344,7 +354,7 @@ fun SheetBarIconButton(
 @Composable
 fun SheetBarBackButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     // iOS 26 draws the back chevron in the label colour (white in dark mode), not the accent.
-    SheetBarIconButton(Icons.Filled.ArrowBackIosNew, "Back", onClick, modifier = modifier, tint = LocalAppColors.current.textPrimary, iconSize = 20.dp)
+    SheetBarIconButton(Icons.Filled.ArrowBackIosNew, tr(R.string.kp_back_b52b3), onClick, modifier = modifier, tint = LocalAppColors.current.textPrimary, iconSize = 20.dp)
 }
 
 /**

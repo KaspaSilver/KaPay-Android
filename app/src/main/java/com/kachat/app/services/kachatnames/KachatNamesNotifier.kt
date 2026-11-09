@@ -71,7 +71,8 @@ class KachatNamesNotifier @Inject constructor(
             val offersOnMine = ArrayList<OfferInfo>()
             for (n in owned) {
                 if (n.status(p.graceMs) != Status.ACTIVE) continue
-                offersOnMine += (orNull { registry.offers(n.name) } ?: emptyList())
+                // a failed read isn't "no offers": comparing it would announce them all gone, then new (iOS 2da5f4b)
+                offersOnMine += (orNull { registry.offers(n.name) } ?: return)
                     .filter { o -> ownKeys.any { it.contentEquals(o.seller) } }
             }
             // The indexer pushes name reminders only to the chatting address: for a name on another
@@ -85,8 +86,11 @@ class KachatNamesNotifier @Inject constructor(
             val (next, news) = diff(
                 old = old, owned = owned, offersOnMine = offersOnMine, myOpenOffers = myOpenOffers,
                 params = p, nowMs = now, selfClosed = selfClosedOffers,
+                offersAreComplete = registry.source.value != KachatNamesRegistry.Source.Chain,
                 history = { name -> orNull { registry.history(name) } ?: emptyList() }
             )
+            // the history reads above can outlast a sign-out: the bell is the signed-in account's (iOS 2da5f4b)
+            if (actions.myAddress != wallet) return
             for (n in news) {
                 bell.record("kachat-${n.id}", SOURCE, title(n), body(n), now, n.name)
             }
@@ -253,7 +257,10 @@ class KachatNamesNotifier @Inject constructor(
         /**
          * The news since [old] and the snapshot to keep (iOS `KachatNamesNotifier.check`). [old]
          * null = the wallet's first check: the snapshot only, no news. [history] answers a name's
-         * history newest first (empty when it can't be read).
+         * history newest first (empty when it can't be read). [offersAreComplete] false (read from
+         * the chain copy, which knows only the offers this device tracked): another device's offer
+         * isn't gone, so the saved offers stay as they were and are compared once the indexer is
+         * back (iOS 2da5f4b).
          */
         suspend fun diff(
             old: Snapshot?,
@@ -263,6 +270,7 @@ class KachatNamesNotifier @Inject constructor(
             params: Params,
             nowMs: Long,
             selfClosed: Set<String>,
+            offersAreComplete: Boolean = true,
             history: suspend (String) -> List<Event>,
         ): Pair<Snapshot, List<News>> {
             val news = ArrayList<News>()
@@ -308,6 +316,7 @@ class KachatNamesNotifier @Inject constructor(
 
             // Offers on your names.
             val onMine = LinkedHashSet<String>()
+            if (!offersAreComplete) onMine += old?.offersOnMine.orEmpty()
             for (o in offersOnMine) {
                 onMine += o.id
                 if (old?.offersOnMine?.contains(o.id) == true) continue
@@ -317,9 +326,10 @@ class KachatNamesNotifier @Inject constructor(
 
             // Your offers: accepted, or back with you.
             val mine = LinkedHashMap<String, String>()
+            if (!offersAreComplete) mine.putAll(old?.myOffers.orEmpty())
             for (o in myOpenOffers) mine[o.id] = o.name ?: ""
             for ((id, name) in old?.myOffers ?: emptyMap()) {
-                if (mine.containsKey(id) || name.isEmpty() || id in selfClosed) continue
+                if (!offersAreComplete || mine.containsKey(id) || name.isEmpty() || id in selfClosed) continue
                 if (owned.any { it.name == name }) {
                     news += News.MyOfferAccepted(name, id)
                     continue

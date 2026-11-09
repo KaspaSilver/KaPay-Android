@@ -1,5 +1,7 @@
 package com.kachat.app.services.kachatnames
 
+import com.kachat.app.util.tr
+import com.kachat.app.R
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
@@ -659,12 +661,15 @@ class KachatNamesActions @Inject constructor(
     private class Context3(val builder: Builder, val env: Env, val wallet: List<Utxo>)
 
     /** Builder, environment and the wallet's funding UTXOs for one transaction, at [rate]
-     *  (default: the priority rate). */
-    private suspend fun context(s: Signer, rate: Double? = null): Context3 {
+     *  (default: the priority rate). [includingHeld]: the coins a send just spent count too
+     *  ([resendCommit], iOS 2da5f4b). */
+    private suspend fun context(s: Signer, rate: Double? = null, includingHeld: Boolean = false): Context3 {
         val builder = service.builder()
         val env = service.environment(s.privateKey, rate ?: feerate())
         _virtualDaa.value = env.blockDaa
-        val utxos = service.utxosByAddresses(listOf(s.address))
+        // not coins a send still in flight spent (iOS 1652437)
+        val fetched = service.utxosByAddresses(listOf(s.address))
+        val utxos = if (includingHeld) fetched else service.unreserved(fetched)
         return Context3(builder, env, KachatNamesService.fundingUtxos(utxos, s.me, env.blockDaa))
     }
 
@@ -676,7 +681,7 @@ class KachatNamesActions @Inject constructor(
     /** What the wallet can spend on names right now (sompi). */
     suspend fun spendable(): Long = withContext(Dispatchers.IO) {
         val s = buyerSigner()
-        val utxos = service.utxosByAddresses(listOf(s.address))
+        val utxos = service.unreserved(service.utxosByAddresses(listOf(s.address)))
         val daa = service.currentVirtualDaaScore() ?: 0L
         KachatNamesService.fundingUtxos(utxos, s.me, daa).sumOf { it.entry.amount }
     }
@@ -761,8 +766,11 @@ class KachatNamesActions @Inject constructor(
      */
     suspend fun combineCoins(s: Signer): String {
         val utxos = service.utxosByAddresses(listOf(s.address))
-        val plain = utxos
-            .filter { it.entry.covenantId == null }
+        // Not a coin a send still in flight spent, nor a mining reward that may not be mature
+        // (iOS 1652437). The fee itself comes from the send below, a zero-amount self-send whose
+        // change is everything less the real fee, so no fixed allowance is ever given away.
+        val plain = service.unreserved(utxos)
+            .filter { it.entry.covenantId == null && it.entry.blockDaaScore > 0 && !it.entry.isCoinbase }
             .sortedByDescending { it.entry.amount }
             .take(com.kachat.app.util.KaspaUtxoSelector.MAX_INPUTS_PER_TRANSACTION)
         val total = plain.sumOf { it.entry.amount }
@@ -864,7 +872,14 @@ class KachatNamesActions @Inject constructor(
                 // Made to an earlier owner: the contract refuses it, and it goes back to the buyer (iOS 49c0baa).
                 if (op.offer.isDeclined(op.name.owner)) throw ActionError.OfferDeclined()
                 validateKey(op.offer.buyer, "The buyer")
-                b.acceptOffer(env, liveName(op.name, m), liveOffer(op.offer, m))
+                // The offer's script doesn't commit to its amount, so the amount the screen showed
+                // is only the indexer's word. The name doesn't go unless the coins really are there
+                // (iOS 953b255).
+                val liveOffered = liveOffer(op.offer, m)
+                if (liveOffered.value != op.offer.amount) {
+                    throw KachatNames.Failure("This offer holds a different amount than was shown. Nothing was sent.")
+                }
+                b.acceptOffer(env, liveName(op.name, m), liveOffered)
             }
             is Operation.Decline -> b.declineOffer(env, liveOffer(op.offer, m))
             is Operation.Release -> {
@@ -1100,6 +1115,8 @@ class KachatNamesActions @Inject constructor(
             keys.any { it.contentEquals(o.buyer) } && o.id !in _withdrawingOffers.value && o.id !in _returningOffers.value
         }
         if (mine.isEmpty()) return
+        // Withdrawing gives up a live offer, so it waits for an answer that is current (iOS 2da5f4b).
+        if (!registry.answersAreCurrent) return
         // the name's current owner; null inside = the name is free (released): every offer on it is declined
         val ownerByName = HashMap<String, ByteArray?>()
         for (o in mine) {
@@ -1111,6 +1128,16 @@ class KachatNamesActions @Inject constructor(
                     throw e
                 } catch (_: Exception) {
                     continue
+                }
+                // whose it is decides whether this offer is withdrawn: not on an unchecked word (iOS 2da5f4b)
+                if (l is Lookup.Registered) {
+                    try {
+                        registry.confirmOnChain(l.info)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        continue
+                    }
                 }
                 // MAINNET.md C1: once the name has expired the seller could accept the offer and
                 // then reclaim the name, so it counts as declined - it comes back (iOS 0312a3f)
@@ -1280,6 +1307,10 @@ class KachatNamesActions @Inject constructor(
         // Claims can run side by side: no one-at-a-time rule any more (iOS b219bb0).
         loadPending(walletAddress)
         registry.refresh()
+        // a copy minutes old can say "free" of a name taken since, and the commit costs money (iOS 2da5f4b)
+        if (!registry.answersAreCurrent) {
+            throw KachatNames.Failure(tr(R.string.kp_the_registry_can_t_be_checked_04a09))
+        }
         // Expired past grace: free to claim. The commit and the reclaim that frees the old record
         // both go out now; the driver registers once the commit has aged (iOS eea52b2, beb9c45).
         val lookup = registry.lookup(name)
@@ -1348,7 +1379,7 @@ class KachatNamesActions @Inject constructor(
     /** Try a failed registration again. */
     fun retry(p: PendingRegistration) {
         combinedFor.remove(p.id) // Try Again may combine coins again (iOS f1c16ec)
-        set(p) { it.copy(stage = PendingRegistration.Stage.WAITING, lastError = null) }
+        set(p) { it.copy(stage = PendingRegistration.Stage.WAITING, lastError = null, commitResends = 0) }
         startDriver()
     }
 
@@ -1481,11 +1512,14 @@ class KachatNamesActions @Inject constructor(
                 if (commit == null) {
                     if (p.commitDaa == null && commitStillPending(p)) return
                     // the commit is gone: registered by us (another device?), or never confirmed
-                    if (ownsName(p.name)) {
-                        finishRegistered(p)
-                    } else {
-                        val why = if (p.commitDaa == null) "The commit never reached the chain." else "The commit is no longer on chain."
-                        set(p) { it.copy(stage = PendingRegistration.Stage.FAILED, lastError = why) }
+                    when (ownsName(p.name)) {
+                        true -> finishRegistered(p)
+                        false -> {
+                            val why = if (p.commitDaa == null) "The commit never reached the chain." else "The commit is no longer on chain."
+                            set(p) { it.copy(stage = PendingRegistration.Stage.FAILED, lastError = why) }
+                        }
+                        // the registry can't be read right now: asked again on the next tick, not failed (iOS 2da5f4b)
+                        null -> Unit
                     }
                     return
                 }
@@ -1563,7 +1597,9 @@ class KachatNamesActions @Inject constructor(
             val owner = runCatching { unhex32(p.owner) }.getOrNull() ?: return
             val s = ownerSignerOrNull(owner) ?: return
             val salt = loadSalt(p.id, pendingWallet ?: s.address) ?: throw ActionError.NoSalt()
-            val c = context(s, registrationFeerate(p))
+            // The dropped commit's own coins, which are still on hold, go back in: the resend then
+            // picks them again, so if the first one lands after all only one of the two can (iOS 2da5f4b).
+            val c = context(s, registrationFeerate(p), includingHeld = true)
             val plan = c.builder.commit(c.env, c.wallet, p.name, salt)
             val script = plan.newCommit?.utxo?.entry?.script
             if (script == null || hex(script) != p.commitScript) throw KachatNames.Failure("commit: a different script")
@@ -1589,14 +1625,16 @@ class KachatNamesActions @Inject constructor(
     }
 
     /** This wallet holds [name] as a live registration (a lapsed old record of it doesn't count:
-     *  that is what claiming an expired name registers over, iOS eea52b2). */
-    private suspend fun ownsName(name: String): Boolean {
+     *  that is what claiming an expired name registers over, iOS eea52b2). Null when the registry
+     *  can't say (iOS 2da5f4b). */
+    private suspend fun ownsName(name: String): Boolean? {
+        if (!registry.answersAreCurrent) return null
         val l = try {
             registry.lookup(name)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            return false
+            return null
         }
         // held by any of this wallet's addresses (a claim from a spending address, iOS eb9b027)
         val owner = (l as? Lookup.Registered)?.info?.owner ?: return false
@@ -1803,6 +1841,23 @@ class KachatNamesActions @Inject constructor(
         /** iOS keeps these in UserDefaults.standard (`kachat_market_addresses.<wallet>`). */
         private const val MARKET_PREFS_NAME = "kachat_market_addresses"
         private val STRING_LIST_TYPE = object : TypeToken<List<String>>() {}.type
+
+        /** Every pending commit salt of a wallet: its account is being removed (iOS 2da5f4b
+         *  `deleteAllKachatCommitSalts`). Here, so that doesn't build the registry on mainnet. */
+        fun deleteAllCommitSalts(context: Context, walletAddress: String) {
+            val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+            val prefs = EncryptedSharedPreferences.create(
+                context,
+                SALT_PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+            val prefix = "kachat_names_commit_salt_${KachatNamesRegistry.walletSuffix(walletAddress)}_"
+            val editor = prefs.edit()
+            prefs.all.keys.filter { it.startsWith(prefix) }.forEach { editor.remove(it) }
+            editor.apply()
+        }
 
         fun registerStep(lookup: Lookup, me: ByteArray, graceMs: Long, nowMs: Long = KachatNames.nowMs()): RegisterStep = when (lookup) {
             is Lookup.Registered -> when {

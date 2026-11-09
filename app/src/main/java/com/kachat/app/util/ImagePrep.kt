@@ -1,13 +1,9 @@
 package com.kachat.app.util
 
-import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import java.io.ByteArrayOutputStream
 
 /** Prepares a picked image for KNS profile upload — matches iOS's client-side prep exactly (downscale to a 1400px longest edge, always re-encode as PNG regardless of source format). */
@@ -124,43 +120,6 @@ object ImagePrep {
             jpegBitmap = Bitmap.createScaledBitmap(jpegBitmap, (jpegBitmap.width * 0.7f).toInt().coerceAtLeast(1), (jpegBitmap.height * 0.7f).toInt().coerceAtLeast(1), true)
         }
         error("unreachable") // repeat() above always returns before falling through
-    }
-
-    /**
-     * Saves already-decoded photo-message bytes to the device's shared Pictures gallery
-     * (Pictures/KaChat), via MediaStore rather than direct file access. On API 29+ this needs no
-     * permission at all (scoped storage); on API 26-28 the caller must already hold
-     * WRITE_EXTERNAL_STORAGE (see AndroidManifest's maxSdkVersion=28 entry — MediaStore inserts
-     * still enforce it pre-scoped-storage). Returns false on any failure rather than throwing,
-     * since the caller only needs a success/failure toast, not a specific reason.
-     */
-    fun saveToGallery(context: Context, bytes: ByteArray, fileName: String, mimeType: String = "image/jpeg"): Boolean {
-        return try {
-            val resolver = context.contentResolver
-            val values = ContentValues().apply {
-                put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
-                put(MediaStore.Images.Media.MIME_TYPE, mimeType)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/KaChat")
-                    put(MediaStore.Images.Media.IS_PENDING, 1)
-                }
-            }
-            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            } else {
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            }
-            val uri = resolver.insert(collection, values) ?: return false
-            resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: return false
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                values.clear()
-                values.put(MediaStore.Images.Media.IS_PENDING, 0)
-                resolver.update(uri, values, null, null)
-            }
-            true
-        } catch (e: Exception) {
-            false
-        }
     }
 
     /** Binary-searches JPEG quality [5, 95] for the highest quality whose encoded size still fits [targetBytes]. */

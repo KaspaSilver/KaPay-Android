@@ -20,6 +20,11 @@ object SendFeeModel {
      *  is not known yet. */
     const val STANDARD_SCRIPT_LEN = 34
 
+    /** A P2SH scriptPublicKey (`OP_BLAKE2B <32-byte hash> OP_EQUAL`): a quantum-safe (KIP-22)
+     *  address, where a primary's or quantum source's change goes (a fresh quantum slot). A byte
+     *  longer than [STANDARD_SCRIPT_LEN], so the fee prices it (iOS buildPlainTransferTx). */
+    const val P2SH_SCRIPT_LEN = 35
+
     /** Passes of [previewAutomaticSelection]'s fixed point. Each pass that does not settle adds at
      *  least one input, so this only bounds pathological coin sets. */
     private const val MAX_PREVIEW_PASSES = 16
@@ -81,9 +86,48 @@ object SendFeeModel {
     }
 
     /** What an automatic-selection send of a given amount spends, and what it pays. Passing
-     *  [utxos] as coin control and [extraFeeSompi] as the extra reproduces exactly this fee. */
-    data class Preview(val utxos: List<UtxoEntry>, val baseFeeSompi: Long, val extraFeeSompi: Long) {
+     *  [utxos] as coin control and [extraFeeSompi] as the extra reproduces exactly this fee.
+     *  [foldedChangeSompi] is change too small to keep, which goes to the fee on top of that, so it
+     *  counts in what the Review shows (iOS 953b255 `SendFeeEstimate`). */
+    data class Preview(
+        val utxos: List<UtxoEntry>,
+        val baseFeeSompi: Long,
+        val extraFeeSompi: Long,
+        val foldedChangeSompi: Long = 0L,
+        /** No coin set fits storage mass for this amount ([KaspaUtxoSelector.SelectionResult.storageMassBlocked]):
+         *  the send would be refused, so the Send screen says so and keeps its swipe off (iOS 0799cec). */
+        val storageMassBlocked: Boolean = false,
+    ) {
         val totalFeeSompi: Long get() = baseFeeSompi + extraFeeSompi
+    }
+
+    /**
+     * Change too small to keep on a coin-control send of exactly [utxos], with [extraFeeSompi] on
+     * top: it goes to the fee and the Review counts it, as [Preview.foldedChangeSompi] does for
+     * automatic selection. 0 when the coins' amounts are not real values ([UtxoMath]); the send
+     * refuses those itself.
+     */
+    fun manualFoldedChange(
+        utxos: List<UtxoEntry>,
+        amountSompi: Long,
+        feeRateSompiPerGram: Long,
+        extraFeeSompi: Long,
+        recipientScriptLen: Int = STANDARD_SCRIPT_LEN,
+        changeScriptLen: Int = STANDARD_SCRIPT_LEN,
+        /** See [baseFee]. */
+        signatureScriptSize: Int = KaspaMass.SCHNORR_SIGNATURE_SCRIPT_LEN,
+    ): Long = try {
+        KaspaUtxoSelector.selectManualUtxosAndCalculateFee(
+            utxos = utxos,
+            amountSompi = amountSompi,
+            feeRateSompiPerGram = feeRateSompiPerGram,
+            recipientScriptLen = recipientScriptLen,
+            changeScriptLen = changeScriptLen,
+            extraFeeSompi = extraFeeSompi,
+            signatureScriptSize = signatureScriptSize,
+        ).foldedChangeSompi
+    } catch (e: IllegalStateException) {
+        0L
     }
 
     /**
@@ -129,7 +173,7 @@ object SendFeeModel {
             }
             if (selection.totalSelected < selection.requiredAmount) return null
             val base = selection.estimatedFee - extra
-            val settled = Preview(selection.selectedUtxos, base, extra)
+            val settled = Preview(selection.selectedUtxos, base, extra, selection.foldedChangeSompi, selection.storageMassBlocked)
             preview = settled
             val next = extraFee(base, feeMultiplier, customExtraFeeSompi)
             if (next == extra) return settled

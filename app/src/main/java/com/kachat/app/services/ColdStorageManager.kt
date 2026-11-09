@@ -1,8 +1,6 @@
 package com.kachat.app.services
 
 import android.content.Context
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.kachat.app.util.KaspaExtendedPublicKey
@@ -65,16 +63,11 @@ class ColdStorageManager @Inject constructor(
 
     private val gson = Gson()
 
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val sharedPrefs = EncryptedSharedPreferences.create(
+    // An unreadable file is set aside and the store starts empty (StartupSafety).
+    private val sharedPrefs = com.kachat.app.util.StartupSafety.encryptedPrefsMovingAsideUnreadable(
         context,
         SECURE_PREFS_NAME,
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        "ColdStorageManager"
     )
 
     private fun getAllAccounts(): List<ColdAccount> {
@@ -134,6 +127,20 @@ class ColdStorageManager @Inject constructor(
     fun deleteAccount(id: String) {
         saveAccounts(getAllAccounts().filter { it.id != id })
         sharedPrefs.edit().remove("${PREF_ADDRESS_SNAPSHOT}_$id").apply()
+    }
+
+    /** Delete Account: everything imported under [walletAddress], from this device (iOS
+     *  `clearAllLocalData`). */
+    fun removeAllData(walletAddress: String) {
+        val gone = getAllAccounts().filter { it.walletAddress == walletAddress }
+        if (gone.isEmpty()) return
+        val ids = gone.map { it.id }.toSet()
+        saveAccounts(getAllAccounts().filter { it.id !in ids })
+        saveAddressLabels(getAllAddressLabels().filter { it.accountId !in ids })
+        saveHiddenAddresses(getAllHiddenAddresses().filter { it.accountId !in ids })
+        val editor = sharedPrefs.edit()
+        for (id in ids) editor.remove("${PREF_ADDRESS_SNAPSHOT}_$id")
+        editor.apply()
     }
 
     // --- Address-list snapshot: opaque JSON of the last fully-loaded row list, persisted per

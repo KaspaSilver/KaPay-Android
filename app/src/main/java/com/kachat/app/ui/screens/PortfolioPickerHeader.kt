@@ -1,5 +1,7 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
+import com.kachat.app.R
 import androidx.compose.foundation.layout.statusBars
 
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -144,7 +146,7 @@ fun PortfolioPickerHeader(
         PortfolioNameDialog(
             title = "New Portfolio",
             initialText = "",
-            confirmLabel = "Create",
+            confirmLabel = tr(R.string.kp_create_6e157),
             onConfirm = { onAdd(it); showAddDialog = false },
             onDismiss = { showAddDialog = false }
         )
@@ -243,7 +245,7 @@ private fun PortfolioCard(
             ) {
                 Icon(
                     Icons.Default.Settings,
-                    contentDescription = "Edit ${portfolio.name}",
+                    contentDescription = tr(R.string.kp_edit_36119, portfolio.name),
                     tint = LocalAppColors.current.textSecondary,
                     modifier = Modifier.size(15.dp)
                 )
@@ -309,7 +311,7 @@ private fun AddPortfolioCard(onClick: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)
     ) {
         Icon(Icons.Default.AddCircle, contentDescription = "Add Portfolio", tint = KaspaTeal, modifier = Modifier.size(26.dp))
-        Text("Add", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+        Text(tr(R.string.kp_add_61cc5), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
     }
 }
 
@@ -330,7 +332,7 @@ private fun PortfolioNameDialog(
             com.kachat.app.ui.theme.IosTextField(
                 value = text,
                 onValueChange = { text = it },
-                label = { Text("Portfolio Name") },
+                label = { Text(tr(R.string.kp_portfolio_name_6d123)) },
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = LocalAppColors.current.textPrimary,
@@ -350,7 +352,7 @@ private fun PortfolioNameDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = LocalAppColors.current.textSecondary)
+                Text(tr(R.string.kp_cancel_77dfd), color = LocalAppColors.current.textSecondary)
             }
         }
     )
@@ -407,17 +409,17 @@ private fun PortfolioActionsSheet(
                     SheetHeader(
                         title = when (mode) {
                             SheetMode.MENU -> target.name
-                            SheetMode.RENAME -> "Rename"
+                            SheetMode.RENAME -> tr(R.string.kp_rename_d3f4c)
                             SheetMode.REORDER -> "Reorder"
                             SheetMode.CONFIRM_DELETE -> "Delete Portfolio"
                         },
                         // From a sub-mode this steps back to the menu rather than closing outright, so a
                         // mis-tap costs one tap instead of the whole long press.
-                        leadingLabel = if (mode == SheetMode.MENU) "Cancel" else "Back",
+                        leadingLabel = if (mode == SheetMode.MENU) tr(R.string.kp_cancel_77dfd) else tr(R.string.kp_back_b52b3),
                         onLeading = { if (mode == SheetMode.MENU) onDismiss() else mode = SheetMode.MENU },
                         trailingLabel = when (mode) {
-                            SheetMode.RENAME -> "Save"
-                            SheetMode.REORDER -> "Done"
+                            SheetMode.RENAME -> tr(R.string.kp_save_efc00)
+                            SheetMode.REORDER -> tr(R.string.kp_done_e9b45)
                             else -> null
                         },
                         trailingEnabled = mode != SheetMode.RENAME || renameText.trim().isNotEmpty(),
@@ -433,21 +435,21 @@ private fun PortfolioActionsSheet(
 
                     when (mode) {
                         SheetMode.MENU -> {
-                            SheetActionRow("Rename", Icons.Default.Edit) {
+                            SheetActionRow(tr(R.string.kp_rename_d3f4c), Icons.Default.Edit) {
                                 renameText = target.name
                                 mode = SheetMode.RENAME
                             }
                             if (hasOthers) {
-                                SheetActionRow("Reorder Portfolios", Icons.Default.SwapVert) {
+                                SheetActionRow(tr(R.string.kp_reorder_portfolios_246bf), Icons.Default.SwapVert) {
                                     reorderDraft = portfolios
                                     mode = SheetMode.REORDER
                                 }
-                                SheetActionRow("Delete '${target.name}'", Icons.Default.Delete, destructive = true) {
+                                SheetActionRow(tr(R.string.kp_delete_3e8dc, target.name), Icons.Default.Delete, destructive = true) {
                                     mode = SheetMode.CONFIRM_DELETE
                                 }
                             } else {
                                 Text(
-                                    "This is your only portfolio, so it can't be deleted or reordered.",
+                                    tr(R.string.kp_this_is_your_only_portfolio_so_9f168),
                                     color = colors.textSecondary,
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
@@ -459,7 +461,7 @@ private fun PortfolioActionsSheet(
                             com.kachat.app.ui.theme.IosTextField(
                                 value = renameText,
                                 onValueChange = { renameText = it },
-                                label = { Text("Portfolio Name") },
+                                label = { Text(tr(R.string.kp_portfolio_name_6d123)) },
                                 singleLine = true,
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = colors.textPrimary,
@@ -472,7 +474,7 @@ private fun PortfolioActionsSheet(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
                             )
                             Text(
-                                "Only the name changes. Transactions stay where they are.",
+                                tr(R.string.kp_only_the_name_changes_transactions_stay_69f93),
                                 color = colors.textSecondary,
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
@@ -507,12 +509,12 @@ private fun PortfolioActionsSheet(
                         }
 
                         SheetMode.CONFIRM_DELETE -> {
-                            SheetActionRow("Delete '${target.name}'", Icons.Default.Delete, destructive = true) {
+                            SheetActionRow(tr(R.string.kp_delete_3e8dc, target.name), Icons.Default.Delete, destructive = true) {
                                 onDelete(target.id)
                                 onDismiss()
                             }
                             Text(
-                                "'${target.name}' and its transactions will be deleted. This can't be undone.",
+                                tr(R.string.kp_and_its_transactions_will_be_deleted_3c57d, target.name),
                                 color = colors.textSecondary,
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)

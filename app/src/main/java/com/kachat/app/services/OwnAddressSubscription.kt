@@ -5,12 +5,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import protowire.Rpc
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,7 +35,8 @@ import javax.inject.Singleton
  *   outpoint, so the same change delivered twice never counts an output twice (iOS IOS-071).
  * - A failed subscribe (no node yet, a node without a UTXO index) retries with capped backoff
  *   (1 s doubling to 30 s), and the dropped stream of a failover re-subscribes on the next
- *   connection. Whenever the subscription comes (back) up, the catch-up pass runs for what
+ *   connection. A change of default network re-subscribes at once, out of any backoff
+ *   ([NodePoolManager.networkPathChanges]). Whenever the subscription comes (back) up, the catch-up pass runs for what
  *   arrived meanwhile and the balance refreshes. While it is down, the notifier's fallback poll
  *   runs ([AddressActivityNotifier.liveSubscriptionActive]).
  * - A new spending address or cold-storage account, or a switch of account, re-subscribes with
@@ -62,7 +68,10 @@ class OwnAddressSubscription @Inject constructor(
     fun start() {
         if (runJob?.isActive == true) return
         runJob = scope.launch {
-            walletManager.activeAddressFlow.collectLatest { address ->
+            // Signed out counts as no account: nothing is subscribed then (iOS has no wallet).
+            combine(walletManager.activeAddressFlow, walletManager.loggedOutFlow) { address, loggedOut ->
+                address.takeUnless { loggedOut }
+            }.distinctUntilChanged().collectLatest { address ->
                 notifier.liveSubscriptionActive = false
                 if (address != null) runSubscription(address)
             }
@@ -88,20 +97,25 @@ class OwnAddressSubscription @Inject constructor(
                     delay(RESUBSCRIBE_CHECK_MS)
                     continue
                 }
-                val connection = nodePoolManager.getUtxoSubscriptionConnection()
-                if (!connection.isConnected) connection.connect()
-                val generation = connection.connectionGeneration.value
-                val notifications = try {
-                    connection.subscribeToUtxosChanged(addresses.toList())
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
+                // Read before the subscribe: a change landing during it re-subscribes again.
+                val pathChange = nodePoolManager.networkPathChanges.value
+                val (connection, generation, notifications) = try {
+                    val conn = nodePoolManager.getUtxoSubscriptionConnection()
+                    if (!conn.isConnected) conn.connect()
+                    val gen = conn.connectionGeneration.value
+                    Triple(conn, gen, conn.subscribeToUtxosChanged(addresses.toList()))
                 } catch (e: Exception) {
+                    // Only this job's own cancellation ends the loop. A subscribe that timed out is
+                    // a CancellationException too, and rethrowing it ended the live balance
+                    // for good, on a dead path above all (iOS 2da5f4b retries a failed subscribe).
+                    currentCoroutineContext().ensureActive()
                     // Capped exponential backoff: a dead pool must not burn an attempt every second.
                     val delaySeconds = minOf(30.0, Math.pow(2.0, attempts.toDouble()))
                     attempts++
                     Log.w(TAG, "UTXO subscription failed (retry in ${delaySeconds.toInt()}s): ${e.message}")
                     notifier.liveSubscriptionActive = false
-                    delay((delaySeconds * 1000).toLong())
+                    // A new network is worth trying at once, whatever the backoff had reached.
+                    if (networkChangedWithin((delaySeconds * 1000).toLong(), pathChange)) attempts = 0
                     continue
                 }
                 attempts = 0
@@ -122,8 +136,8 @@ class OwnAddressSubscription @Inject constructor(
                 try {
                     var ticks = 0
                     while (true) {
-                        delay(RESUBSCRIBE_CHECK_MS)
-                        if (connection.connectionGeneration.value != generation || !connection.isConnected) {
+                        val pathChanged = networkChangedWithin(RESUBSCRIBE_CHECK_MS, pathChange)
+                        if (pathChanged || connection.connectionGeneration.value != generation || !connection.isConnected) {
                             Log.i(TAG, "UTXO stream dropped - re-subscribing")
                             break
                         }
@@ -147,6 +161,11 @@ class OwnAddressSubscription @Inject constructor(
             }
         }
     }
+
+    /** Waits up to [ms]; true as soon as the default network has changed since [seen] (the old
+     *  path's sockets died with it: iOS `UtxoSubscriptionManager.handleEpochChange`). */
+    private suspend fun networkChangedWithin(ms: Long, seen: Long): Boolean =
+        withTimeoutOrNull(ms) { nodePoolManager.networkPathChanges.first { it != seen } } != null
 
     private suspend fun enqueue(message: Rpc.UtxosChangedNotificationMessage, walletAddress: String) {
         // More than the Kaspa supply in one batch is a broken or hostile node's: dropped (iOS

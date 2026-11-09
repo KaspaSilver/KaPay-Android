@@ -3,7 +3,6 @@
     <string name="kas">.kas</string>
     <string name="n_0_00">0.00</string>
     <string name="n_12_words">12語</string>
-    <string name="a_kns_inscription_s_commit_transaction">KNSインスクリプションのコミット取引は完了しましたが、リビールは完了しませんでした。今すぐ再試行して完了してください。完了するまで資金は安全に確保されています。</string>
     <string name="accept">承認</string>
     <string name="account_name">アカウント名</string>
     <string name="active_nodes">アクティブノード</string>
@@ -20,7 +19,7 @@
     <string name="all_discovered_nodes_sorted_by_state">検出されたすべてのノードを状態とレイテンシーで並べ替え。ノードはhost:portで重複排除されます。</string>
     <string name="amount_kas">金額 (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">同じチャンネル名に参加した人は誰でもメッセージを見て投稿できます。所有者や招待はありません。</string>
-    <string name="anyone_with_your_seed_phrase_can">シードフレーズを持っている人は誰でもあなたのアカウントにアクセスできます。誰とも絶対に共有しないでください。必ず書き留めるだけにしてください。スクリーンショットを撮ったり、デバイスに保存したりしないでください。</string>
+    <string name="anyone_with_your_seed_phrase_can">12語または24語を知っている人は誰でもアカウントにアクセスできます。絶対に誰にも教えないでください。</string>
     <string name="back">戻る</string>
     <string name="before_you_swap">スワップする前に</string>
     <string name="broadcasting">ブロードキャスト中...</string>
@@ -111,7 +110,7 @@
     <string name="join">参加</string>
     <string name="join_or_create_a_channel">チャンネルに参加または作成</string>
     <string name="kas_2">KAS</string>
-    <string name="kns_domains">KNSドメイン</string>
+    <string name="kns_domains">あなたのドメイン</string>
     <string name="kachat">KaChat</string>
     <string name="kachat_logo">KaChatロゴ</string>
     <string name="kachat_can_t_show_notifications_until">このアプリの通知を許可するまで、KaPayは通知を表示できません。</string>
@@ -187,7 +186,6 @@
     <string name="resolving_domain">ドメインを解決中…</string>
     <string name="retention">保持</string>
     <string name="retry">再試行</string>
-    <string name="retry_inscription_reveal">インスクリプションのリビールを再試行</string>
     <string name="save">保存</string>
     <string name="saved_accounts">保存済みアカウント</string>
     <string name="scan">スキャン</string>
@@ -199,7 +197,7 @@
     <string name="search_chats">チャットを検索</string>
     <string name="secure_messaging_on_kaspa_blockdag">Kaspa BlockDAG上の安全なメッセージング</string>
     <string name="security_warning">セキュリティ警告</string>
-    <string name="seed_phrase">Seed Phrase</string>
+    <string name="seed_phrase">12語または24語</string>
     <string name="select_time">時刻を選択</string>
     <string name="select_chat">チャットを選択</string>
     <string name="send">送信</string>
@@ -220,7 +218,7 @@
     <string name="swaps_are_processed_by_changenow_a">スワップはサードパーティの取引所であるChangeNOWによって処理されます。続行すると、ChangeNOW独自の利用規約を読み、同意したことを確認したことになります。KaChatはスワップリクエストを送信しステータスを表示するだけです。KaChatは失敗、遅延、または紛失したスワップについて責任を負いません。スワップが完了しない場合は、直接ChangeNOWサポートにお問い合わせください。</string>
     <string name="tap_an_address_below_to_swap">下のアドレスをタップしてそこからスワップします</string>
     <string name="tap_an_address_below_to_use">下のアドレスをタップして使用します</string>
-    <string name="tap_to_reveal_seed_phrase">タップしてseed phraseを表示</string>
+    <string name="tap_to_reveal_seed_phrase">タップして12語または24語を表示</string>
     <string name="this_could_take_a_few_minutes">チェーン上で確認されるまで数分かかる場合があります。</string>
     <string name="this_only_removes_it_from_kachat">これはKaPayのウォッチリストから削除するだけです。KasSignerデバイスや保有する資金には影響しません。</string>
     <string name="this_permanently_deletes_every_message_with">これはこのデバイス上の彼らとのすべてのメッセージを完全に削除します。これは元に戻せません。再度メッセージを送ると、まったく新しい会話が始まります。</string>
@@ -332,7 +330,7 @@
     <string name="version">バージョン</string>
     <string name="vibration">バイブレーション</string>
     <string name="view_profile">プロフィールを表示</string>
-    <string name="view_seed_phrase">Seed Phraseを表示</string>
+    <string name="view_seed_phrase">12語または24語を表示</string>
     <string name="view_in_explorer">エクスプローラーで表示</string>
     <string name="website">ウェブサイト</string>
     <string name="x">X</string>
@@ -480,7 +478,7 @@
     <!-- .kachat listing, buy and offer (iOS cd9e10c, 0e50fdf) -->
     <string name="kl_offers">オファー</string>
     <string name="kl_offer">オファー</string>
-    <string name="kl_offer_detail">希望の価格を提示できます。KAS は売り手が承諾するか、取り下げるか、期限が切れるまでオンチェーンで待機します。事前に売り手にメッセージも送れます。</string>
+    <string name="kl_offer_detail">希望の価格を指定できます。KASは、売り手が承諾するか、オファーを取り下げるか、期限が切れるまでチェーン上で待機します。</string>
     <string name="kl_listing">出品</string>
     <string name="kl_price">価格</string>
     <string name="kl_buy_now">今すぐ購入</string>
@@ -971,7 +969,7 @@
     <string name="create_wallet_name_title">ウォレットの名前を作成</string>
     <string name="create_wallet_name_detail">この名前はこの端末にのみ保存され、ウォレットを見分けるために使われます。他の人に見られることはありません。</string>
     <string name="create_wallet_seed_next_warning">次の画面に seed phrase が表示されます。これがアカウントを復元する唯一の方法です。書き留めて安全に保管し、画面を誰にも見られないようにしてください。</string>
-    <string name="choose_seed_phrase_length">seed phrase の長さを選択</string>
+    <string name="choose_seed_phrase_length">12語または24語を選択</string>
     <!-- Create Account, step 3: the seed phrase (iOS CreateWalletSeedStep) -->
     <string name="write_down_your_seed_phrase">Seed Phraseを書き留めてください</string>
     <string name="store_this_in_a_safe_place_anyone_with_these_words">安全な場所に保管してください。これらの単語を知っている人は誰でもアカウントにアクセスできます。</string>
@@ -1030,9 +1028,9 @@
     <string name="kn_commit_waiting_busy">ネットワークが混雑しています。コミットはブロックを待っています。</string>
     <string name="kn_commit_sent_again">ネットワークが混雑しているため、コミットを再送しました。</string>
     <!-- Onboarding: import length step and the seed phrase explainer (iOS dd0aab1) -->
-    <string name="import_seed_length_detail">インポートする seed phrase は何語ですか?</string>
+    <string name="import_seed_length_detail">何語インポートしますか？</string>
     <string name="what_is_this">これは何ですか?</string>
-    <string name="what_is_a_seed_phrase">seed phrase とは?</string>
+    <string name="what_is_a_seed_phrase">12語または24語とは？</string>
     <string name="seed_phrase_explainer_master_key">seed phrase は、アカウントのマスターキーとして機能する 12 語または 24 語の普通の単語のリストです。ウォレット、チャット用アドレス、メッセージはすべてここから生まれます。</string>
     <string name="seed_phrase_explainer_anyone">これらの単語を持っている人は、アカウントのすべてを持ち出せます。単語をなくし、さらにこの端末もなくすと、誰もアカウントを取り戻せません。KaPay でも無理です。</string>
     <string name="seed_phrase_explainer_paper">単語は順番どおりに紙に書き、安全で人目につかない場所に保管してください。ウェブサイトに入力したり、チャットで送ったり、スクリーンショットやクラウドのメモに残したりしないでください。</string>
@@ -1048,7 +1046,7 @@
     <string name="cache_web_responses">Web レスポンス</string>
     <string name="cache_web_responses_detail">システムのネットワークキャッシュに保存されたリンクプレビューと API レスポンス。</string>
     <string name="cache_temporary_files">一時ファイル</string>
-    <string name="cache_temporary_files_detail">写真やボイスメモの送信で作られた一時ファイル。いつ削除しても問題ありません。</string>
+    <string name="cache_temporary_files_detail">アプリが不要になった一時ファイルです。いつでも安全に削除できます。</string>
     <!-- Import Account, the words screen (iOS ImportWalletView) -->
     <string name="import_words_continue">続ける</string>
     <!-- .kachat Renew: choose the period first (iOS 26bd5dc) -->
@@ -1379,4 +1377,7 @@
     <string name="kaspa_node_settings_footer">自動スキャンは利用可能な最適なノードを見つけて接続します。特定のノードを選ぶとそのノードのみに接続し、他には切り替えません。他のタブのインデクサ、ドメイン、エクスプローラには影響しません。ここで選ぶには、下の IP アドレス帳に独自のアドレスを追加してください。</string>
     <string name="ab_picker_empty_body">ウォレット > 連絡先 で連絡先を追加できます。</string>
     <string name="ab_no_contacts">連絡先はまだありません</string>
+    <string name="where_is_this_seed_phrase_from">12語または24語はどこのものですか？</string>
+    <string name="different_wallets_store_your_kaspa">ウォレットによって、Kaspaを保管するアドレスのパスが異なります。KaPayが資金とドメインを見つけられるよう、これらの単語がどこのものかを選んでください。</string>
+    <string name="import_words_enter_recovery_phrase">12語または24語を入力</string>
 </resources>

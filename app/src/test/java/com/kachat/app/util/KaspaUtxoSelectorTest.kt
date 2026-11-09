@@ -165,4 +165,48 @@ class KaspaUtxoSelectorTest {
         assertTrue(withMemo.estimatedFee > plain.estimatedFee)
         assertEquals(withMemo.totalSelected - withMemo.finalAmount - withMemo.estimatedFee, withMemo.changeAmount)
     }
+
+    // --- The recipient's amount is never cut to fit (audit: Max quietly sent less) ------------
+
+    private val rate = KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM
+    private val coin = 100_000_000L
+    private val feeWithChange = KaspaMass.calculateFee(KaspaMass.calculateMass(1, listOf(34, 34), 0), rate)
+    private val feeNoChange = KaspaMass.calculateFee(KaspaMass.calculateMass(1, listOf(34), 0), rate)
+
+    @Test
+    fun `a gap under the change output's cost is priced without one and folded, never taken from the recipient`() {
+        // 1,000 sompi short of a two-output fee: the old selector took that off the recipient.
+        val amount = coin - feeWithChange + 1_000L
+        val greedy = KaspaUtxoSelector.selectUtxosAndCalculateFee(listOf(utxo(coin)), amount, rate, null, 34, 34)
+        val manual = KaspaUtxoSelector.selectManualUtxosAndCalculateFee(listOf(utxo(coin)), amount, rate, 34, 34)
+        for (r in listOf(greedy, manual)) {
+            assertEquals(amount, r.finalAmount)
+            assertTrue(r.totalSelected >= r.requiredAmount)
+            assertTrue(!r.changeOutputPriced)
+            assertTrue(!r.storageMassBlocked)
+            assertEquals(feeNoChange, r.estimatedFee)
+            // what is left goes to the fee, and the Review counts it
+            assertEquals(coin - amount - feeNoChange, r.foldedChangeSompi)
+            assertEquals(coin - amount, r.estimatedFee + r.foldedChangeSompi)
+        }
+    }
+
+    @Test
+    fun `an amount the coins can't cover with any fee stays short, not cut`() {
+        val amount = coin - feeNoChange + 1L
+        val greedy = KaspaUtxoSelector.selectUtxosAndCalculateFee(listOf(utxo(coin)), amount, rate, null, 34, 34)
+        val manual = KaspaUtxoSelector.selectManualUtxosAndCalculateFee(listOf(utxo(coin)), amount, rate, 34, 34)
+        for (r in listOf(greedy, manual)) {
+            assertEquals(amount, r.finalAmount)
+            assertTrue(r.totalSelected < r.requiredAmount)
+        }
+    }
+
+    @Test
+    fun `an ordinary send still prices and keeps its change output`() {
+        val r = KaspaUtxoSelector.selectUtxosAndCalculateFee(listOf(utxo(coin)), 30_000_000L, rate, null, 34, 35)
+        assertTrue(r.changeOutputPriced)
+        assertEquals(KaspaMass.calculateFee(KaspaMass.calculateMass(1, listOf(34, 35), 0), rate), r.estimatedFee)
+        assertEquals(0L, r.foldedChangeSompi)
+    }
 }

@@ -436,17 +436,30 @@ data class PortfolioSync(
 
 
 /**
- * The Portfolio backup on Nextcloud ([NextcloudService.PORTFOLIO_FILE_NAME]): one wallet's
- * [PortfolioSync] as plain JSON, iOS's `PortfolioBackupFile` (wallet 59593af) -
- * `{exportedAt, fees, portfolios, tombstones, transactions, version}`, keys sorted and pretty
- * printed as iOS's encoder writes them. Dates are kept exact, in iOS's default `Date` encoding
- * (a number: seconds since 2001-01-01), since a merge compares edit stamps and iOS's default
- * decoder reads nothing else. Read leniently, one element at a time, accepting ISO 8601 too.
+ * One portfolio's backup on Nextcloud, JSON inside the contacts' encrypted v1 envelope (an earlier
+ * build wrote it plain) in a file named after it ([NextcloudService],
+ * iOS 953b255 `PortfolioBackupFile`): that portfolio with its transactions and fees, and every
+ * deletion the wallet knows of, so a device reading any one file learns what was deleted -
+ * `{exportedAt, fees, portfolios, tombstones, transactions, type, version, walletAddress}`, keys
+ * sorted and pretty printed as iOS's encoder writes them. Version 1 was the one file holding every
+ * portfolio, with no `type` or owner. Dates are kept exact, in iOS's default `Date` encoding (a
+ * number: seconds since 2001-01-01), since a merge compares edit stamps and iOS's default decoder
+ * reads nothing else. Read leniently, one element at a time, accepting ISO 8601 too.
  */
 object PortfolioBackupFile {
-    const val CURRENT_VERSION = 1
+    const val KIND = "kapay-portfolio"
+    const val CURRENT_VERSION = 2
 
     private const val APPLE_REFERENCE_EPOCH_S = 978_307_200L
+
+    /** A file as read: the owner decides whether this account may touch it. */
+    data class Decoded(
+        val version: Int,
+        val type: String?,
+        /** The account it belongs to. Another account's file is never read or written over. */
+        val walletAddress: String?,
+        val sync: PortfolioSync,
+    )
 
     /** iOS's default Date encoding with this device's millisecond precision, written plain
      *  ("783212345.123", never in exponent form). */
@@ -454,24 +467,32 @@ object PortfolioBackupFile {
         JsonPrimitive(java.math.BigDecimal.valueOf(ms, 3).subtract(java.math.BigDecimal.valueOf(APPLE_REFERENCE_EPOCH_S)))
     }
 
-    fun encode(sync: PortfolioSync, exportedAtMillis: Long = System.currentTimeMillis()): ByteArray {
+    fun encode(sync: PortfolioSync, walletAddress: String, exportedAtMillis: Long = System.currentTimeMillis()): ByteArray {
         val file = JsonObject().apply {
             add("exportedAt", appleDate(exportedAtMillis))
             add("fees", JsonArray().apply { sync.fees.forEach { add(PortfolioSync.encodeFee(it, appleDate)) } })
             add("portfolios", JsonArray().apply { sync.portfolios.forEach { add(PortfolioSync.encodePortfolio(it, appleDate)) } })
             add("tombstones", JsonArray().apply { sync.tombstones.forEach { add(PortfolioSync.encodeTombstone(it, appleDate)) } })
             add("transactions", JsonArray().apply { sync.transactions.forEach { add(PortfolioSync.encodeTransaction(it, appleDate)) } })
+            addProperty("type", KIND)
             addProperty("version", CURRENT_VERSION)
+            addProperty("walletAddress", walletAddress)
         }
         return com.google.gson.GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create()
             .toJson(file).toByteArray(Charsets.UTF_8)
     }
 
-    /** The backup's portfolios. Throws [NextcloudException] for a file that isn't one. */
-    fun decode(data: ByteArray): PortfolioSync {
+    /** The file. Throws [NextcloudException] for one that isn't JSON. */
+    fun decode(data: ByteArray): Decoded {
         val root = runCatching {
             com.google.gson.JsonParser.parseString(String(data, Charsets.UTF_8)).asJsonObject
         }.getOrNull() ?: throw NextcloudException("The Portfolio backup on Nextcloud couldn't be read.")
-        return PortfolioSync.fromArchive(root.get("portfolios"), root.get("transactions"), root.get("fees"), root.get("tombstones"))
+        fun text(key: String) = runCatching { root.get(key)?.takeIf { !it.isJsonNull }?.asString }.getOrNull()
+        return Decoded(
+            version = runCatching { root.get("version")?.asInt }.getOrNull() ?: 1,
+            type = text("type"),
+            walletAddress = text("walletAddress"),
+            sync = PortfolioSync.fromArchive(root.get("portfolios"), root.get("transactions"), root.get("fees"), root.get("tombstones")),
+        )
     }
 }

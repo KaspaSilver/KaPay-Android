@@ -52,12 +52,6 @@ class WalletService @Inject constructor(
     private val _spendingBalance = MutableStateFlow(0L)
     val spendingBalance: StateFlow<Long> = _spendingBalance.asStateFlow()
 
-    /** Every revealed spending address together, not just the current one. Null until a fetch
-     *  succeeds, and left alone on a failure, so the caller can omit the line rather than claim
-     *  a total of zero. */
-    private val _spendingTotalBalance = MutableStateFlow<Long?>(null)
-    val spendingTotalBalance: StateFlow<Long?> = _spendingTotalBalance.asStateFlow()
-
     /**
      * The REST API client is built asynchronously off [AppSettingsRepository]'s persisted URL
      * (see [NetworkService.observeSettings]), so right after a cold app launch it can still be
@@ -80,9 +74,6 @@ class WalletService @Inject constructor(
     fun resetBalancesForAccountSwitch() {
         _balance.value = 0L
         _spendingBalance.value = 0L
-        // Profile's Manage Addresses total belongs to the account it was read for: cleared (the
-        // card shows no figure) until the new account's lands, never carried over (iOS c130dc1).
-        _spendingTotalBalance.value = null
         _balanceKnown.value = false
     }
 
@@ -116,22 +107,6 @@ class WalletService @Inject constructor(
             _spendingBalance.value = balance
         } catch (e: Exception) {
             Log.e("WalletService", "Error refreshing spending balance", e)
-        }
-
-        // The whole set through fetchBalancesBatched: one round trip where the REST host
-        // implements the batch endpoint, and a chunked per-address sweep where it does not.
-        // Calling api.getBalances directly meant a host without that endpoint threw, the total
-        // stayed null, and the Total line simply never appeared.
-        try {
-            val all = walletManager.allSpendingAddresses()
-            if (all.isEmpty()) return
-            val balances = fetchBalancesBatched(all)
-            if ((try { walletManager.currentSpendingAddress() } catch (e: Exception) { null }) != address) return
-            // An address the sweep could not reach comes back absent, which reads as zero. That
-            // is a floor, not a wrong number, and it is still better than no line at all.
-            if (balances.isNotEmpty()) _spendingTotalBalance.value = balances.values.sum()
-        } catch (e: Exception) {
-            Log.w("WalletService", "Error refreshing total spending balance", e)
         }
     }
 
@@ -178,6 +153,13 @@ class WalletService @Inject constructor(
         walletManager.isAddressKnownUsed(address) -> true
         address in sessionUnusedAddresses -> false
         else -> null
+    }
+
+    /** A send just spent from [address] or put its change there: this session's "never used" answer
+     *  is out of date (iOS 2da5f4b `markSpendingAddressUsed`). "Used" is monotonic, so it's kept. */
+    fun markSpendingAddressUsed(address: String) {
+        sessionUnusedAddresses.remove(address)
+        walletManager.markAddressUsed(address)
     }
 
     /**
@@ -296,6 +278,10 @@ class WalletService @Inject constructor(
         // nothing: bail out as a failed load rather than fabricate an all-zero list.
         val balances = fetchBalancesBatched(addressByIndex.values.toList())
         if (balances.isEmpty()) return emptyList()
+        // A failed read isn't an empty address: the last figures known, which also keeps a funded
+        // address in the From lists (iOS 2da5f4b). Such a row stays not live-checked.
+        val lastKnownBalances: Map<String, Long> = if (addressByIndex.values.all { it in balances }) emptyMap()
+        else cachedSpendingAddressList().associate { it.address to it.balanceSompi }
         // Re-read the primary index AFTER the slow balance round trip — a send can rotate it
         // mid-load, and stamping rows with the index captured before the fetch is how a stale
         // isCurrent used to land in the committed list and the persisted snapshot. Display
@@ -327,7 +313,7 @@ class WalletService @Inject constructor(
                             }
                         }
                         SpendingAddressEntry(
-                            index, address, balance ?: 0L, everUsed,
+                            index, address, balance ?: lastKnownBalances[address] ?: 0L, everUsed,
                             isCurrent = index == primaryNow,
                             hidden = index in hiddenIndices,
                             label = labels[index],
@@ -570,84 +556,7 @@ class WalletService @Inject constructor(
         return walletManager.generateNextQuantumAddress(account.owner)
     }
 
-    data class DomainInscribeResult(
-        val domain: String,
-        val isReservedDomain: Boolean,
-        val serviceFeeSompi: Long,
-        val commitTxId: String,
-        val revealTxId: String,
-        val verified: Boolean
-    )
-
-    private data class KnsCreateDomainPayload(val op: String, val p: String, val v: String)
-
     enum class KnsInscribeStep { CHECKING_AVAILABILITY, FETCHING_FEE, SUBMITTING_COMMIT, SUBMITTING_REVEAL, VERIFYING }
-
-    /**
-     * Registers a new `.kas` domain for the wallet's own address — real on-chain commit/reveal
-     * inscription, verified against iOS's `KNSDomainInscribeService.inscribeDomain`
-     * (`KNSService.swift:1312-1407`). Costs real KAS: a fee-tier lookup determines the price
-     * (shorter labels cost dramatically more), paid to KNS's fixed revenue address unless the
-     * domain is server-flagged "reserved" (fee waived, reveal goes back to the wallet itself).
-     * [onStep] reports progress — this can take 30-90+ seconds (broadcast + verification polling)
-     * and the caller is watching real money move, so a silent spinner isn't good enough.
-     */
-    suspend fun inscribeDomain(rawLabel: String, onStep: (KnsInscribeStep) -> Unit = {}): DomainInscribeResult {
-        val label = KnsService.normalizeDomainLabel(rawLabel) ?: throw IllegalArgumentException("Invalid domain label")
-        val fullDomain = "$label.kas"
-        val myAddress = walletManager.getAddress()
-
-        onStep(KnsInscribeStep.CHECKING_AVAILABILITY)
-        val availability = knsService.checkDomainAvailability(myAddress, fullDomain)
-        if (!availability.available) throw IllegalStateException("Domain $fullDomain is not available")
-
-        if (!availability.isReservedDomain && !myAddress.startsWith("kaspa:")) {
-            throw IllegalStateException("KNS domain inscription revenue address is not configured for testnet")
-        }
-
-        onStep(KnsInscribeStep.FETCHING_FEE)
-        val feeTiers = knsService.fetchInscribeFeeTiers()
-        val tier = KnsService.feeTierForLabel(label)
-        val tierFee = KnsService.feeForTier(tier, feeTiers)
-        val revealKas = KnsService.revealAmountKas(tierFee, availability.isReservedDomain)
-        val commitKas = KnsService.commitAmountKas(revealKas)
-        val revealSompi = kasToSompi(revealKas)
-        val commitSompi = kasToSompi(commitKas)
-
-        val payloadJson = Gson().toJson(KnsCreateDomainPayload(op = "create", p = "domain", v = label)).toByteArray()
-        val revealTarget = if (availability.isReservedDomain) myAddress else MAINNET_REVENUE_ADDRESS
-
-        // KNS activity is funded and settled entirely on the identity/chatting address chain -
-        // no spending-address split, so nothing ends up scattered across two addresses.
-        val identityPrivateKey = walletManager.getPrivateKeyBytes()
-
-        onStep(KnsInscribeStep.SUBMITTING_COMMIT)
-        val commit = knsInscriptionEngine.buildAndSubmitCommit(
-            payloadJson = payloadJson,
-            commitAmountSompi = commitSompi,
-            revealAmountSompi = revealSompi,
-            revealTargetAddress = revealTarget,
-            operationType = "domain",
-            fundingAddress = myAddress,
-            fundingPrivateKey = identityPrivateKey,
-            ownerPrivateKey = identityPrivateKey
-        )
-        onStep(KnsInscribeStep.SUBMITTING_REVEAL)
-        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, revealTarget, myAddress, identityPrivateKey)
-
-        onStep(KnsInscribeStep.VERIFYING)
-        val verified = verifyDomainOwnership(fullDomain, myAddress)
-        refreshBalance()
-
-        return DomainInscribeResult(
-            domain = fullDomain,
-            isReservedDomain = availability.isReservedDomain,
-            serviceFeeSompi = revealSompi,
-            commitTxId = commit.commitTxId,
-            revealTxId = revealTxId,
-            verified = verified
-        )
-    }
 
     data class ProfileUpdateResult(val fieldKey: String, val commitTxId: String, val revealTxId: String, val verified: Boolean)
 
@@ -659,7 +568,7 @@ class WalletService @Inject constructor(
 
     /**
      * Sets one on-chain KNS profile field (bio, social links, etc.) on the given domain asset —
-     * same commit/reveal engine as [inscribeDomain], but a flat, much smaller, self-funded cost.
+     * same commit/reveal engine as a domain transfer, but a flat, much smaller, self-funded cost.
      * Verified against iOS's `KNSProfileWriteService.submitAddProfile` (`KNSService.swift:1150-1277`).
      */
     suspend fun updateKnsProfileField(assetId: String, fieldKey: String, value: String, onStep: (KnsInscribeStep) -> Unit = {}): ProfileUpdateResult {
@@ -680,7 +589,6 @@ class WalletService @Inject constructor(
             commitAmountSompi = PROFILE_COMMIT_SOMPI,
             revealAmountSompi = PROFILE_REVEAL_SOMPI,
             revealTargetAddress = myAddress,
-            operationType = "profile",
             fundingAddress = myAddress,
             fundingPrivateKey = identityPrivateKey,
             ownerPrivateKey = identityPrivateKey
@@ -784,24 +692,33 @@ class WalletService @Inject constructor(
                 commitAmountSompi = TRANSFER_COMMIT_SOMPI,
                 revealAmountSompi = TRANSFER_REVEAL_SOMPI,
                 revealTargetAddress = sourceAddress,
-                operationType = "transfer",
                 fundingAddress = sourceAddress,
                 fundingPrivateKey = sourcePrivateKey,
                 ownerPrivateKey = sourcePrivateKey,
-                changeAddress = changeAddress
+                changeAddress = changeAddress,
+                ownerSpendingIndex = fromSpendingAddressIndex,
+                revealPriorityFeeSompi = priorityFeeSompi
             )
         } catch (e: Throwable) {
             // A commit that failed gives the slot back; one interrupted with its outcome unknown
             // reveals it - revealing is always safe, handing a slot that may hold change out
             // again is not.
-            fresh?.let { walletManager.finishQuantumChangePick(it, reveal = e is kotlinx.coroutines.CancellationException) }
+            fresh?.let {
+                walletManager.finishQuantumChangePick(
+                    it,
+                    reveal = e is kotlinx.coroutines.CancellationException || e is SendOutcomeUnknownException
+                )
+                // It may yet land, with its change on the fresh address: that has to be on the
+                // list (iOS 2da5f4b).
+                if (e is SendOutcomeUnknownException) walletManager.setSpendingAddressIndex(it.walletAddress, it.index)
+            }
             throw e
         }
         if (fresh != null) {
             // The commit is accepted and its change is already on the fresh address, so it is
-            // revealed and the primary follows it now. Should the reveal still fail, the commit
-            // output is recoverable from the source key either way, and the pointer no longer
-            // names an address that just spent. Both on the account this transfer started on
+            // revealed and the primary follows it now, whatever becomes of the reveal
+            // ([KnsRevealRecovery] retries that), and the pointer no longer names an address that
+            // just spent. Both on the account this transfer started on
             // (the pick's own, [sourceOwner]) even if another is active by now, and nothing once
             // it was removed (iOS ca09dd0, IOS-109 / AND-056).
             walletManager.finishQuantumChangePick(fresh, reveal = true)
@@ -848,35 +765,6 @@ class WalletService @Inject constructor(
         }
         return false
     }
-
-    /**
-     * Retries just the reveal half of a KNS inscription whose commit already broadcast but whose
-     * reveal never completed (app killed, network error, etc.) — reconstructs the exact same
-     * commit context that was persisted right after the commit succeeded, so the same funds get
-     * revealed rather than left stuck in the P2SH commit output.
-     */
-    suspend fun retryPendingKnsReveal(pending: com.kachat.app.models.PendingKnsCommit): String {
-        val commit = KnsInscriptionEngine.CommitResult(
-            commitTxId = pending.commitTxId,
-            redeemScript = pending.redeemScriptHex.hexToBytes(),
-            commitScriptPubKeyHex = pending.commitScriptPubKeyHex,
-            commitAmountSompi = pending.commitAmountSompi,
-            revealAmountSompi = pending.revealAmountSompi
-        )
-        // changeAddress falls back to the identity address for a commit persisted before that
-        // field existed — the reveal signature is always the identity key regardless (it has to
-        // match the redeem script's embedded pubkey from when the commit was originally built).
-        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(
-            commit,
-            pending.revealTargetAddress,
-            pending.changeAddress ?: walletManager.getAddress(),
-            walletManager.getPrivateKeyBytes()
-        )
-        refreshBalance()
-        return revealTxId
-    }
-
-    private fun String.hexToBytes(): ByteArray = chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
     /** Polls forward resolution until the new domain's owner matches, up to 90s — a UX confirmation step, not something the broadcast itself depends on. */
     private suspend fun verifyDomainOwnership(fullDomain: String, expectedOwnerAddress: String): Boolean {
@@ -945,7 +833,6 @@ class WalletService @Inject constructor(
             return runCatching { com.kachat.app.util.KaspaAddress.decode(address.trim().lowercase()).first == 0x08.toByte() }.getOrDefault(false)
         }
 
-        private const val MAINNET_REVENUE_ADDRESS = "kaspa:qyp4nvaq3pdq7609z09fvdgwtc9c7rg07fuw5zgeee7xpr085de59eseqfcmynn"
 
         /** Legacy per-conversation random alias — 6 random bytes as 12 lowercase hex chars, the
          *  format Kasia web and iOS KaChat validate. No longer used for new chats (XP-003: a

@@ -763,14 +763,23 @@ class PortfolioViewModel @Inject constructor(
             onUnavailable("No transactions to export yet")
             return
         }
-        try {
-            // Named after the portfolio as named in the app (iOS 87b2a0b), and every row carries
-            // that name in its Portfolio column (iOS wallet 59593af).
-            val name = portfolios.value.firstOrNull { it.id == activePortfolioId.value }?.name
-            onReady(repository.exportCsv(rows, PortfolioRepository.exportBaseName(name), portfolioName = name.orEmpty()))
-        } catch (e: Exception) {
-            Log.w("PortfolioViewModel", "CSV export failed", e)
-            onUnavailable("Export failed. Please try again")
+        // Named after the portfolio as named in the app (iOS 87b2a0b), and every row carries
+        // that name in its Portfolio column (iOS wallet 59593af).
+        val name = portfolios.value.firstOrNull { it.id == activePortfolioId.value }?.name
+        viewModelScope.launch {
+            // the file is written off the main thread; the callbacks run back on it
+            val uri = try {
+                kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    repository.exportCsv(rows, PortfolioRepository.exportBaseName(name), portfolioName = name.orEmpty())
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("PortfolioViewModel", "CSV export failed", e)
+                onUnavailable("Export failed. Please try again")
+                return@launch
+            }
+            onReady(uri)
         }
     }
 

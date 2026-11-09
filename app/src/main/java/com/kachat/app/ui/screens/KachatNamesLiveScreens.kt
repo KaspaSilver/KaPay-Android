@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import com.kachat.app.ui.theme.iosShadow
 import android.content.Context
 import android.text.format.DateUtils
@@ -561,7 +562,8 @@ class KachatLiveViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                emptyList()
+                // a failed read keeps what's on screen (iOS 2da5f4b)
+                grace
             }
             // the chatting address and every used address of this wallet (iOS d1026de, IOS-085)
             loadOwnKeys()
@@ -649,21 +651,11 @@ class KachatLiveViewModel @Inject constructor(
     }
 }
 
-/**
- * Just the social lookups (avatar, banner, bio from a linked account), for the profile editor where
- * the registry isn't launched (mainnet, iOS 7227d69): it shows the live editor there, and its
- * previews look the accounts up, but nothing builds the registry stack.
- */
-@HiltViewModel
-class KachatSocialViewModel @Inject constructor(
-    val social: KachatSocialImageResolver,
-) : ViewModel()
-
 // MARK: - Small building blocks
 
 /** The app's glass card (iOS `kachatGlass`): the material surface, rounded, a 0.8 white hairline
  *  at 18% and a soft shadow (black at 10%, radius 8, 4 down). */
-private fun Modifier.kachatGlass(colors: com.kachat.app.ui.theme.AppColors, radius: Int = 16): Modifier =
+internal fun Modifier.kachatGlass(colors: com.kachat.app.ui.theme.AppColors, radius: Int = 16): Modifier =
     this.iosShadow(radius.dp, Color.Black.copy(alpha = 0.10f), 8.dp, 4.dp)
         .clip(RoundedCornerShape(radius.dp))
         .background(colors.surface)
@@ -834,60 +826,6 @@ private fun yearsText(years: Int, params: Params?): String = when {
 private fun pricePerPeriodTitle(params: Params?): String =
     if (KachatLive.yearlyPeriods(params)) stringResource(R.string.kn_price_per_year)
     else stringResource(R.string.kn_price_per_period, yearsText(1, params))
-
-/** A Form text field: no box, the row is the field. */
-@Composable
-private fun FormTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    modifier: Modifier = Modifier,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    textStyle: TextStyle = LocalTextStyle.current,
-    singleLine: Boolean = true,
-    minLines: Int = 1,
-    maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
-    textAlign: TextAlign = TextAlign.Start,
-) {
-    val colors = LocalAppColors.current
-    TextField(
-        value = value,
-        onValueChange = onValueChange,
-        placeholder = { Text(placeholder, color = colors.textTertiary, style = textStyle, textAlign = textAlign, modifier = Modifier.fillMaxWidth()) },
-        singleLine = singleLine,
-        minLines = minLines,
-        maxLines = maxLines,
-        textStyle = textStyle.copy(textAlign = textAlign),
-        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrect = false, keyboardType = keyboardType),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
-            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-            focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary, cursorColor = KaspaTeal,
-        ),
-        modifier = modifier
-    )
-}
-
-/** A filled field's trailing clear button (iOS `xmark.circle.fill`, secondary). The 20dp icon
- *  sits 16 in from the edge as before; the tap target around it is 44dp, iOS's minimum. */
-@Composable
-private fun FormClearButton(onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .padding(end = 4.dp)
-            .size(44.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            Icons.Default.Cancel,
-            contentDescription = stringResource(R.string.clear),
-            tint = LocalAppColors.current.textSecondary,
-            modifier = Modifier.size(20.dp),
-        )
-    }
-}
 
 /** A Form section: header, the rounded card, and its footer. */
 @Composable
@@ -1692,35 +1630,6 @@ fun KachatRegistrationCard(registration: PendingRegistration, vm: KachatLiveView
 // MARK: - Hub: pages
 
 /**
- * Swipe left / right anywhere on the .kachat marketplace to the next / previous of its tabs
- * (Marketplace, Available, Expired, Activity) - iOS wallet 040f91a `KachatMarketView.pageSwipe()`,
- * as on the Chess screen. Read alongside the screen's own gestures, never instead of them, so
- * the vertical scroll, the search field and the tiles keep working: a lift-off at least 50 dp
- * sideways, and 1.5 times as far sideways as up or down, moves one tab. Put it on the container
- * that holds the scrolling column (not on the column itself), so the finger is measured against
- * a screen that stays put while the column scrolls.
- */
-fun Modifier.kachatPageSwipe(pageCount: Int, page: () -> Int, onPage: (Int) -> Unit): Modifier =
-    pointerInput(pageCount) {
-        val switchDistance = 50.dp.toPx()
-        awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            var last = down.position
-            while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
-                val change = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
-                last = change.position
-                if (!change.pressed) break
-            }
-            val dx = last.x - down.position.x
-            val dy = last.y - down.position.y
-            if (kotlin.math.abs(dx) <= switchDistance || kotlin.math.abs(dx) <= kotlin.math.abs(dy) * 1.5f) return@awaitEachGesture
-            val index = page()
-            if (dx < 0 && index + 1 < pageCount) onPage(index + 1) else if (dx > 0 && index > 0) onPage(index - 1)
-        }
-    }
-
-/**
  * Marketplace: names for sale (iOS 0765ce0 `KachatLiveMarketPage`). [vm] is null where the registry
  * isn't launched (mainnet): the same page, empty (iOS 7227d69).
  */
@@ -2461,7 +2370,8 @@ fun KachatTxSheet(
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            emptyList()
+            // a failed read leaves the balance unknown, not 0 (iOS 2da5f4b)
+            return@LaunchedEffect
         }
         payerBalance = utxos.sumOf { it.entry.amount }
     }
@@ -2554,15 +2464,12 @@ fun KachatTxSheet(
         }
     }
 
-    fun authorize() {
-        // busy at once: the swipe-up's screen is already sending through the device check, and a
-        // refused check is its "Failed" (iOS 05db583)
+    /** The swipe-up has already asked the device's lock (iOS 953b255 `startSend`). */
+    fun startSend() {
+        // busy at once: the swipe-up's screen is already sending
         sending = true
         sendError = null
-        context.kachatAuthorize(onFailure = {
-            sendError = context.getString(R.string.kn_not_confirmed_nothing_sent)
-            sending = false
-        }) { send() }
+        send()
     }
 
     val form: @Composable ColumnScope.() -> Unit = {
@@ -2665,7 +2572,7 @@ fun KachatTxSheet(
                 canContinue = canContinue,
                 onContinue = { go(KachatTxScreen.REVIEW) },
                 onBack = onBack,
-                continueTitle = "Review",
+                continueTitle = tr(R.string.kp_review_e29a7),
                 insets = insets,
             ) {
                 entryQuestion?.let { SendStepQuestion(it, Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp)) }
@@ -2685,10 +2592,11 @@ fun KachatTxSheet(
                 sent = txId?.let { SentTransaction(it, spentSompi, swipe.recipient) },
                 failureMessage = sendError,
                 labels = swipe.labels,
+                authReason = stringResource(R.string.kn_auth_reason),
                 outcome = txId?.let { id -> @Composable { KachatTxStageSteps(id, vm) } },
                 explorerUrl = { explorer.txUrl(it) },
                 onDone = onClose,
-                onSwipe = { authorize() },
+                onSwipe = { startSend() },
                 insets = insets,
             ) {
                 Column(Modifier.padding(16.dp).padding(bottom = 24.dp), content = form)
@@ -2904,15 +2812,12 @@ fun KachatClaimSheet(target: KachatClaimTarget, onClose: () -> Unit, onStarted: 
         }
     }
 
-    /** The swipe let go: busy at once (the swipe screen is already sending), then the device
-     *  check, then the commit (iOS 5bab351 `authorizeAndStart`). */
-    fun authorizeAndStart() {
+    /** The swipe-up has already asked the device's lock (iOS 953b255 `startClaim`): busy at once,
+     *  then the commit. */
+    fun startClaim() {
         starting = true
         startError = null
-        context.kachatAuthorize(onFailure = {
-            startError = context.getString(R.string.kn_not_confirmed_nothing_sent)
-            starting = false
-        }) { start() }
+        start()
     }
 
     // the sheet already sits clear of the status and navigation bars
@@ -2977,7 +2882,7 @@ fun KachatClaimSheet(target: KachatClaimTarget, onClose: () -> Unit, onStarted: 
                                     }
                                 }
                                 Text(
-                                    "The price goes to the miners - KaChat takes nothing.",
+                                    tr(R.string.kp_the_price_goes_to_the_miners_c0415),
                                     color = colors.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp)
                                 )
                             }
@@ -2997,10 +2902,11 @@ fun KachatClaimSheet(target: KachatClaimTarget, onClose: () -> Unit, onStarted: 
                             sent = null,
                             failureMessage = startError,
                             labels = SwipeUpLabels.Claim,
+                            authReason = stringResource(R.string.kn_auth_reason),
                             succeeded = progressId != null,
                             outcome = progressId?.let { id -> @Composable { KachatClaimOutcome(id, vm) } },
                             onDone = { dismiss() },
-                            onSwipe = { authorizeAndStart() },
+                            onSwipe = { startClaim() },
                             insets = noInsets,
                             onSendingChange = { swipeSending = it },
                         ) {
@@ -3026,7 +2932,7 @@ fun KachatClaimSheet(target: KachatClaimTarget, onClose: () -> Unit, onStarted: 
 
                                 KachatCard {
                                     KachatCardRow(stringResource(R.string.kl_name), "${target.name}.kachat")
-                                    KachatCardRow("Length", yearsText(years.toInt(), params))
+                                    KachatCardRow(tr(R.string.kp_length_3bade), yearsText(years.toInt(), params))
                                     HorizontalDivider(color = colors.divider)
                                     val q = quote
                                     val qe = quoteError
@@ -3076,7 +2982,7 @@ fun KachatClaimSheet(target: KachatClaimTarget, onClose: () -> Unit, onStarted: 
                                 )
 
                                 Text(
-                                    "Claiming sends two transactions: the commit now, the registration about a minute later. Both pay this fee rate.",
+                                    tr(R.string.kp_claiming_sends_two_transactions_the_commit_4fe63),
                                     color = colors.textSecondary, fontSize = 12.sp, modifier = Modifier.fillMaxWidth()
                                 )
 
@@ -3335,8 +3241,11 @@ fun KachatLiveNameDetailScreen(
         if (held == null && !vm.isMine(info.owner) && owner != null) {
             runCatching { vm.registry.identity(owner) }.getOrNull()?.let { ownerLabel = it.label }
         }
-        history = runCatching { vm.registry.history(info.name) }.getOrNull() ?: emptyList()
-        offers = KachatLive.currentOffers(runCatching { vm.registry.offers(info.name) }.getOrNull() ?: emptyList(), info.owner, history)
+        // a failed read keeps what's on screen: it isn't "no history" or "no offers" (iOS 2da5f4b)
+        history = runCatching { vm.registry.history(info.name) }.getOrNull() ?: history
+        runCatching { vm.registry.offers(info.name) }.getOrNull()?.let { open ->
+            offers = KachatLive.currentOffers(open, info.owner, history)
+        }
         if (offers.isNotEmpty()) {
             vm.actions.refreshVirtualDaa()
             // Expired offers don't stay on your name: the owner's app (and the buyer's) send them
@@ -3835,7 +3744,7 @@ fun KachatLiveOfferSheet(
             add(
                 KachatTxRow(
                     stringResource(R.string.kn_refundable_after),
-                    if (cappedByExpiry) KachatLive.day(info.expiresAt - 600_000L) else if (days == 1) "1 day" else "$days days"
+                    if (cappedByExpiry) KachatLive.day(info.expiresAt - 600_000L) else if (days == 1) tr(R.string.kp_d_day_e40b4, 1) else tr(R.string.kp_d_days_0e3de, days)
                 )
             )
         }
@@ -4002,7 +3911,7 @@ fun KachatRenewSheet(info: NameInfo, onClose: () -> Unit, vm: KachatLiveViewMode
                             onCancel = { dismiss() },
                             canContinue = years != null,
                             onContinue = { step = KachatRenewStep.REVIEW },
-                            continueTitle = "Review",
+                            continueTitle = tr(R.string.kp_review_e29a7),
                             // the sheet already sits clear of the status and navigation bars
                             insets = WindowInsets(0),
                         ) {
@@ -4664,385 +4573,10 @@ data class KachatSourceInput(val platform: SocialSource.Platform = SocialSource.
 }
 
 /**
- * One profile field's source (avatar, banner or bio) looked up on this device, showing exactly the
- * piece other people will see (iOS `KachatSocialPreview`, 169f6a0 / c124cb3 / 0f44a07). The
- * caller composes it only while the handle names an account.
- *
- * It can't restart itself (iOS 0f44a07): the lookup runs in one LaunchedEffect at the top of this
- * composable, keyed only by the link and the Retry count - never by [lookup] or the result - so
- * swapping the spinner for the result doesn't cancel and relaunch it. Leaving the composition or a
- * new key cancels the old lookup, so only the latest one ever writes its state. Coming back into the
- * composition, it shows the resolver's stored answer at once and re-checks quietly (iOS d17d208).
- */
-@Composable
-private fun KachatSocialPreview(
-    link: String,
-    kind: SocialSource.Kind,
-    lookup: KachatSocialLookup,
-    onLookup: (KachatSocialLookup) -> Unit,
-    resolver: KachatSocialImageResolver,
-) {
-    val colors = LocalAppColors.current
-    val source = remember(link, kind) { SocialSource.from(link, kind) }
-    var resolved by remember { mutableStateOf<SocialProfile?>(null) }
-    var attempt by remember { mutableIntStateOf(0) }
-    val setLookup by rememberUpdatedState(onLookup)
-
-    fun piece(p: SocialProfile?): String? = when (kind) {
-        SocialSource.Kind.AVATAR -> p?.avatar
-        SocialSource.Kind.BANNER -> p?.banner
-        SocialSource.Kind.BIO -> p?.bio
-    }
-
-    // Debounced: one lookup once typing pauses; `attempt` reruns it for Retry. Whatever happens -
-    // cancelled, restarted, failed - the state always lands somewhere final.
-    LaunchedEffect(source?.link, attempt) {
-        if (source == null) { resolved = null; setLookup(KachatSocialLookup.NONE); return@LaunchedEffect }
-        // The preview came back into the composition (the Save / Clear review left the form and
-        // closed again): the answer this screen already got shows at once - no debounce, no
-        // "Looking up" flash, no refetch (iOS d17d208). Retry (attempt > 0) still runs the full
-        // lookup.
-        val cached = if (attempt == 0) resolver.cachedProfile(source) else null
-        if (cached != null) {
-            resolved = cached
-            setLookup(if (piece(cached) == null) KachatSocialLookup.EMPTY else KachatSocialLookup.FOUND)
-            // Still re-checked quietly (the resolver's own 5-minute freshness): a profile changed
-            // on the platform lands here without the flash.
-            val result = resolver.resolve(source)
-            ensureActive()
-            if (result !is KachatSocialImageResolver.Lookup.Answered || result.profile == cached) return@LaunchedEffect
-            resolved = result.profile
-            setLookup(if (piece(result.profile) == null) KachatSocialLookup.EMPTY else KachatSocialLookup.FOUND)
-            return@LaunchedEffect
-        }
-        setLookup(KachatSocialLookup.LOOKING)
-        delay(500)
-        val result = resolver.resolve(source)
-        ensureActive()
-        resolved = result.profile
-        setLookup(
-            when (result) {
-                is KachatSocialImageResolver.Lookup.Answered -> if (piece(result.profile) == null) KachatSocialLookup.EMPTY else KachatSocialLookup.FOUND
-                is KachatSocialImageResolver.Lookup.Unreachable -> if (piece(result.profile) == null) KachatSocialLookup.UNREACHABLE else KachatSocialLookup.FOUND
-            }
-        )
-    }
-
-    if (source == null) return
-    val name = source.platform.displayName
-    SettingsDivider()
-    Column(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.Center) {
-        when (lookup) {
-            KachatSocialLookup.NONE, KachatSocialLookup.LOOKING -> Row(verticalAlignment = Alignment.CenterVertically) {
-                IosActivityIndicator(modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(stringResource(R.string.kn_social_looking), color = colors.textSecondary, fontSize = 13.sp)
-            }
-            KachatSocialLookup.FOUND -> Column(Modifier.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                when (kind) {
-                    SocialSource.Kind.AVATAR -> ContactAvatar(imageUrl = resolved?.avatar, fallbackText = "", size = 64.dp)
-                    SocialSource.Kind.BANNER -> {
-                        val gradient = androidx.compose.ui.graphics.Brush.linearGradient(listOf(KaspaTeal.copy(alpha = 0.55f), KaspaTeal.copy(alpha = 0.15f)))
-                        // Whole, at its own proportions (iOS c66bfc7).
-                        WholeBanner(model = resolved?.banner, placeholderHeight = 90.dp, shape = RoundedCornerShape(8.dp)) {
-                            Box(Modifier.fillMaxSize().background(gradient))
-                        }
-                    }
-                    SocialSource.Kind.BIO -> Text(resolved?.bio ?: "", color = colors.textPrimary, fontSize = 15.sp)
-                }
-                Text(stringResource(R.string.kn_social_from, name), color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            }
-            KachatSocialLookup.EMPTY -> Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(KachatSymbols.PersonCircleBadgeExclamation, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                val missing = when (kind) {
-                    SocialSource.Kind.AVATAR -> R.string.kn_social_no_avatar
-                    SocialSource.Kind.BANNER -> R.string.kn_social_no_banner
-                    SocialSource.Kind.BIO -> R.string.kn_social_no_bio
-                }
-                Text(stringResource(missing, name), color = colors.textSecondary, fontSize = 13.sp)
-            }
-            KachatSocialLookup.UNREACHABLE -> Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.SignalWifiStatusbarConnectedNoInternet4, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(stringResource(R.string.kn_couldnt_reach, name), color = colors.textSecondary, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Text(
-                    stringResource(R.string.retry),
-                    color = KaspaTeal,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { attempt++ }.padding(horizontal = 6.dp, vertical = 4.dp)
-                )
-            }
-        }
-    }
-}
-
-/**
- * Platform picker, the handle after the platform's prefix, and the preview of what it shows (iOS
- * `sourceField`, c124cb3 / 0f44a07). A whole pasted link switches the picker to its platform.
- */
-@Composable
-private fun KachatSourceField(
-    input: KachatSourceInput,
-    onInput: (KachatSourceInput) -> Unit,
-    kind: SocialSource.Kind,
-    lookup: KachatSocialLookup,
-    onLookup: (KachatSocialLookup) -> Unit,
-    resolver: KachatSocialImageResolver,
-) {
-    val colors = LocalAppColors.current
-    var picking by remember { mutableStateOf(false) }
-    // iOS's menu Picker: the label, the choice on the right, the choices in a menu.
-    Box {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { picking = true }.padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(stringResource(R.string.kn_account_on), color = colors.textPrimary, modifier = Modifier.weight(1f))
-            Text(input.platform.displayName, color = colors.textSecondary)
-            Icon(Icons.Default.UnfoldMore, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(18.dp))
-        }
-        DropdownMenu(expanded = picking, onDismissRequest = { picking = false }) {
-            SocialSource.Platform.choices(kind).forEach { p ->
-                DropdownMenuItem(text = { Text(p.displayName) }, onClick = { onInput(input.copy(platform = p)); picking = false })
-            }
-        }
-    }
-    SettingsDivider()
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(input.platform.prefix, color = colors.textSecondary)
-        FormTextField(
-            input.handle,
-            { h ->
-                val typed = input.copy(handle = h)
-                val pasted = typed.pastedSource(kind)
-                onInput(if (pasted != null) KachatSourceInput(pasted.platform, pasted.displayHandle) else typed)
-            },
-            stringResource(if (input.platform == SocialSource.Platform.DISCORD) R.string.kn_invite else R.string.kn_handle),
-            Modifier.weight(1f),
-            keyboardType = KeyboardType.Uri
-        )
-        // One tap empties the field; saving then writes the profile without it (iOS 9638498).
-        if (input.handle.isNotEmpty()) {
-            FormClearButton {
-                onInput(KachatSourceInput())
-                onLookup(KachatSocialLookup.NONE)
-            }
-        }
-    }
-    // Only while the handle names an account: no empty row, and the lookup starts when it appears.
-    input.source(kind)?.link?.let { link ->
-        KachatSocialPreview(link, kind, lookup, onLookup, resolver)
-    }
-}
-
-/**
- * The address profile (KACHAT_NAMES.md section 7): where the avatar, banner and bio come from (a
- * social profile link each - they can be different accounts), a Linktree link, and which of your
- * names labels you - written as a `kchat:1:profile:` self-transfer. No free text and no uploads:
- * what shows comes from a platform that moderates it (iOS `KachatLiveProfileEditor`, 5df42b4 /
- * 1322216 / 169f6a0 / c124cb3 / 0f44a07).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun KachatLiveProfileEditorScreen(
-    onBack: () -> Unit,
-    /** On every network since iOS d36fc42: a profile is a self-send, with no registry behind it,
-     *  so mainnet reads and saves it too. Only the primary name waits for mainnet's registry. */
-    vm: KachatLiveViewModel? = if (KachatNamesService.profilesEnabled) hiltViewModel() else null,
-    social: KachatSocialImageResolver = vm?.social ?: hiltViewModel<KachatSocialViewModel>().social,
-) {
-    val colors = LocalAppColors.current
-    // Each piece's source: a platform from the picker plus the handle typed after its prefix.
-    var avatarIn by remember { mutableStateOf(KachatSourceInput()) }
-    var bannerIn by remember { mutableStateOf(KachatSourceInput()) }
-    var bioIn by remember { mutableStateOf(KachatSourceInput()) }
-    var avatarLookup by remember { mutableStateOf(KachatSocialLookup.NONE) }
-    var bannerLookup by remember { mutableStateOf(KachatSocialLookup.NONE) }
-    var bioLookup by remember { mutableStateOf(KachatSocialLookup.NONE) }
-    var linktree by remember { mutableStateOf("") }
-    var primary by remember { mutableStateOf("") }
-    var activeNames by remember { mutableStateOf<List<String>>(emptyList()) }
-    var loaded by remember { mutableStateOf(false) }
-    // Save Profile opens the review sheet (iOS 7e238e5), which saves and then closes the editor.
-    var showSave by remember { mutableStateOf(false) }
-    // Clear Profile opens the same review sheet with the empty record (iOS 9638498).
-    var showClear by remember { mutableStateOf(false) }
-    var pickPrimary by remember { mutableStateOf(false) }
-    // The editor's scroll position outlives the Save / Clear review drawn in its place, so Cancel
-    // there returns to the field you were at - iOS shows the review as a sheet over the editor.
-    val formScroll = rememberScrollState()
-
-    LaunchedEffect(Unit) {
-        val address = vm?.actions?.myAddress
-        if (vm == null || address == null) { loaded = true; return@LaunchedEffect }
-        vm.registry.refreshIfStale()
-        // start from the newest profile, wherever it was saved (another device included; iOS
-        // 5d4ce87) - never from an older copy that a save would write over it
-        vm.registry.syncOwnProfile(address)
-        val p = vm.registry.ownProfile(address)?.profile
-            ?: runCatching { vm.registry.identity(address).profile }.getOrNull()
-        if (p != null) {
-            avatarIn = KachatSourceInput.stored(p.avatar, SocialSource.Kind.AVATAR)
-            bannerIn = KachatSourceInput.stored(p.banner, SocialSource.Kind.BANNER)
-            bioIn = KachatSourceInput.stored(p.bio, SocialSource.Kind.BIO)
-            linktree = Profile.linktreeUsername(p.linktree)
-        }
-        KachatNamesRegistry.keyOf(address)?.let { key ->
-            activeNames = (runCatching { vm.registry.names(key, includeInactive = false) }.getOrNull() ?: emptyList()).map { it.name }
-        }
-        p?.primaryName?.let { if (it in activeNames) primary = it }
-        loaded = true
-    }
-
-    // Once one field's account is found, the empty fields take the same account where its platform
-    // can fill them - one handle sets up the whole profile, and each stays editable. Each effect
-    // runs only when its own lookup changes (iOS onChange), and only fills empty fields, so it
-    // can't feed itself.
-    fun fillEmpty(input: KachatSourceInput) {
-        fun fits(kind: SocialSource.Kind) = input.platform in SocialSource.Platform.choices(kind)
-        if (avatarIn.isEmpty && fits(SocialSource.Kind.AVATAR)) avatarIn = input
-        if (bannerIn.isEmpty && fits(SocialSource.Kind.BANNER)) bannerIn = input
-        if (bioIn.isEmpty && fits(SocialSource.Kind.BIO)) bioIn = input
-    }
-    LaunchedEffect(avatarLookup) { if (avatarLookup == KachatSocialLookup.FOUND) fillEmpty(avatarIn) }
-    LaunchedEffect(bannerLookup) { if (bannerLookup == KachatSocialLookup.FOUND) fillEmpty(bannerIn) }
-    LaunchedEffect(bioLookup) { if (bioLookup == KachatSocialLookup.FOUND) fillEmpty(bioIn) }
-
-    // The Linktree field holds just the username (`linktr.ee/` is shown in front of it).
-    val badLinktree = linktree.trim().let { it.isNotEmpty() && Profile.linktreeLinkFromUsername(it) == null }
-    // Only a malformed handle or Linktree username stops a save; links that couldn't be checked
-    // are saved as entered, with a note saying so (iOS 5cac6af).
-    val saveFields = listOf(
-        KachatProfileSaveRule.Field(avatarIn, SocialSource.Kind.AVATAR, avatarLookup),
-        KachatProfileSaveRule.Field(bannerIn, SocialSource.Kind.BANNER, bannerLookup),
-        KachatProfileSaveRule.Field(bioIn, SocialSource.Kind.BIO, bioLookup),
-    )
-    val blocked = KachatProfileSaveRule.blocked(saveFields, badLinktree)
-    val hasUncheckedLinks = KachatProfileSaveRule.hasUncheckedLinks(saveFields)
-
-    fun profile(): Profile = Profile(
-        avatar = avatarIn.source(SocialSource.Kind.AVATAR)?.link,
-        banner = bannerIn.source(SocialSource.Kind.BANNER)?.link,
-        bio = bioIn.source(SocialSource.Kind.BIO)?.link,
-        linktree = Profile.linktreeLinkFromUsername(linktree),
-        primaryName = primary.ifEmpty { null }
-    ).sanitized()
-
-    if (showSave && vm != null) {
-        KachatProfileSaveSheet(
-            title = stringResource(R.string.kn_save_profile), confirmTitle = stringResource(R.string.kn_save_profile),
-            doneTitle = R.string.kn_done_profile_saved, makeProfile = { profile() },
-            onClose = { showSave = false }, onSaved = onBack, vm = vm
-        )
-        return
-    }
-    // The newest record is the whole profile, so the empty record IS "this address has nothing":
-    // the indexer and every app show nothing for it from then on (iOS 9638498).
-    if (showClear && vm != null) {
-        KachatProfileSaveSheet(
-            title = stringResource(R.string.kn_clear_profile), confirmTitle = stringResource(R.string.kn_clear_profile),
-            doneTitle = R.string.kn_done_profile_cleared, makeProfile = { Profile() },
-            onClose = { showClear = false }, onSaved = onBack, vm = vm
-        )
-        return
-    }
-
-    @Composable
-    fun invalidHandleNote() = FormFooter(stringResource(R.string.kn_handle_bad), colors.danger)
-
-    KachatLiveForm(title = stringResource(R.string.edit_kachat_profile), onClose = onBack, scrollState = formScroll) {
-        FormSection(footer = { FormFooter(stringResource(R.string.kn_profile_pieces_footer)) }) {
-            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Top) {
-                Icon(Icons.Outlined.Badge, contentDescription = null, tint = KaspaTeal, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(12.dp))
-                Text(stringResource(R.string.kn_profile_belongs), color = colors.textPrimary, fontSize = 15.sp)
-            }
-        }
-        FormSection(header = stringResource(R.string.avatar), footer = if (avatarIn.isBad(SocialSource.Kind.AVATAR)) ({ invalidHandleNote() }) else null) {
-            KachatSourceField(avatarIn, { avatarIn = it }, SocialSource.Kind.AVATAR, avatarLookup, { avatarLookup = it }, social)
-        }
-        FormSection(header = stringResource(R.string.banner), footer = if (bannerIn.isBad(SocialSource.Kind.BANNER)) ({ invalidHandleNote() }) else null) {
-            KachatSourceField(bannerIn, { bannerIn = it }, SocialSource.Kind.BANNER, bannerLookup, { bannerLookup = it }, social)
-        }
-        FormSection(header = stringResource(R.string.bio), footer = if (bioIn.isBad(SocialSource.Kind.BIO)) ({ invalidHandleNote() }) else null) {
-            KachatSourceField(bioIn, { bioIn = it }, SocialSource.Kind.BIO, bioLookup, { bioLookup = it }, social)
-        }
-        FormSection(
-            header = stringResource(R.string.kn_links),
-            footer = {
-                if (badLinktree) FormFooter(stringResource(R.string.kn_linktree_username_bad), colors.danger)
-                else FormFooter(stringResource(R.string.kn_linktree_footer))
-            }
-        ) {
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("linktr.ee/", color = colors.textSecondary)
-                FormTextField(linktree, { linktree = it }, stringResource(R.string.kn_username), Modifier.weight(1f), keyboardType = KeyboardType.Uri)
-                if (linktree.isNotEmpty()) FormClearButton { linktree = "" }
-            }
-        }
-        FormSection(
-            header = stringResource(R.string.kachat_name_section),
-            footer = {
-                FormFooter(stringResource(if (KachatNamesService.isLaunched) R.string.kn_primary_footer else R.string.kn_primary_not_on_mainnet))
-            }
-        ) {
-            // The primary name needs the registry: until it launches on this network (mainnet)
-            // there's no name to pick, so the profile saves without one (iOS d36fc42).
-            if (!KachatNamesService.isLaunched) {
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(stringResource(R.string.kn_primary_name), color = colors.textPrimary, modifier = Modifier.weight(1f))
-                    Text(stringResource(R.string.coming_soon), color = colors.textSecondary)
-                }
-            } else
-            // iOS's menu Picker: the label, the choice on the right, the choices in a menu.
-            Box {
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { pickPrimary = true }.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(stringResource(R.string.kn_primary_name), color = colors.textPrimary, modifier = Modifier.weight(1f))
-                    Text(if (primary.isEmpty()) stringResource(R.string.kn_none) else "$primary.kachat", color = colors.textSecondary)
-                    Icon(Icons.Default.UnfoldMore, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(18.dp))
-                }
-                DropdownMenu(expanded = pickPrimary, onDismissRequest = { pickPrimary = false }) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.kn_none)) }, onClick = { primary = ""; pickPrimary = false })
-                    activeNames.forEach { n ->
-                        DropdownMenuItem(text = { Text("$n.kachat") }, onClick = { primary = n; pickPrimary = false })
-                    }
-                }
-            }
-        }
-        // Saves on every network: a profile is a self-send, with no registry behind it (iOS d36fc42).
-        FormSection(footer = {
-            Column(
-                Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                if (hasUncheckedLinks) {
-                    Text(stringResource(R.string.kn_save_unchecked_links), fontSize = 13.sp, lineHeight = 18.sp, color = colors.textSecondary)
-                }
-                Text(stringResource(R.string.kn_save_footer), fontSize = 13.sp, lineHeight = 18.sp, color = colors.textSecondary)
-            }
-        }) {
-            FormButtonRow(stringResource(R.string.kn_save_profile), enabled = loaded && !blocked && KachatNamesService.profilesEnabled) { showSave = true }
-        }
-        FormSection(footer = { FormFooter(stringResource(R.string.kn_clear_footer)) }) {
-            // Same gate as saving: a clear IS a save, of the empty record.
-            FormButtonRow(stringResource(R.string.kn_clear_profile), enabled = loaded && KachatNamesService.profilesEnabled, destructive = true) { showClear = true }
-        }
-    }
-}
-
-/**
  * Review before a profile record goes out - what will be saved, the network fee, the chatting
  * address's balance before and after - the same confirmation every other name action shows; then
- * the device lock, the save, and the finished-transaction half sheet. Used by Edit KaChat
- * Profile and by Set as Primary (iOS `KachatProfileSaveSheet`, 7e238e5). A full-screen swap with
+ * the device lock, the save, and the finished-transaction half sheet. Used by Set as Primary
+ * (iOS `KachatProfileSaveSheet`, 7e238e5; a profile itself is edited in KaChat or KaPost). A full-screen swap with
  * Cancel top left, as every sheet in this port.
  */
 @Composable
@@ -5298,7 +4832,8 @@ class KachatExpiredNamesViewModel @Inject constructor(
         // Profile's own loads use five minutes too: a shorter window here refreshed in between
         // and restarted every Profile effect keyed on the registry's revision (iOS 9de981a).
         reg.refreshIfStale(maxAgeMs = 300_000)
-        val owned = runCatching { reg.names(me, includeInactive = true) }.getOrNull().orEmpty()
+        // a failed read keeps the banner as it is (iOS 2da5f4b)
+        val owned = runCatching { reg.names(me, includeInactive = true) }.getOrNull() ?: return
         val inGrace = KachatNamesRegistry.inGracePeriod(owned, reg.graceMs)
         // assigned only on a change
         if (inGrace != expired) expired = inGrace
@@ -5358,7 +4893,7 @@ fun KachatExpiredNamesBanner(walletAddress: String?, vm: KachatExpiredNamesViewM
             modifier = Modifier
                 .size(28.dp)
                 .clickable(role = androidx.compose.ui.semantics.Role.Button) { vm.dismissAll() }
-                .semantics { contentDescription = "Dismiss" },
+                .semantics { contentDescription = tr(R.string.kp_dismiss_70afe) },
         ) {
             Icon(Icons.Default.Close, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(14.dp))
         }

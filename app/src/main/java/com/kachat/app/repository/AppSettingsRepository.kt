@@ -8,7 +8,6 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.google.gson.Gson
-import com.kachat.app.models.PendingKnsCommit
 import com.kachat.app.util.KaspaNetwork
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -60,7 +59,7 @@ class AppSettingsRepository @Inject constructor(
         // Kaspium-style. Empty string = disabled (normal pool discovery).
         val KEY_TRUSTED_NODE_ADDRESS = stringPreferencesKey("trusted_node_address")
         // User-saved node addresses for quick copy/paste into the Kaspa Node field above -
-        // Gson-encoded list, same pattern as KEY_PENDING_KNS_COMMIT below.
+        // Gson-encoded list.
         val KEY_SAVED_NODE_ADDRESSES = stringPreferencesKey("saved_node_addresses")
         // NodePoolManager's persisted last-known-good gRPC nodes (comma-joined "host:port"
         // list, best-latency first). Written whenever the automatic-discovery pool has Active
@@ -202,9 +201,6 @@ class AppSettingsRepository @Inject constructor(
         // QuickReactionBar (Screens.kt) / QuickReactionBarView (iOS) for where this is read.
         val KEY_QUICK_REACTION_EMOJIS = stringPreferencesKey("quick_reaction_emojis")
 
-        // A single in-flight KNS commit awaiting its reveal — see PendingKnsCommit.
-        val KEY_PENDING_KNS_COMMIT = stringPreferencesKey("pending_kns_commit")
-
         // Device-level message retention (Forever / 30 / 90 days / 1 year) - see BackupRetention.
         val KEY_BACKUP_RETENTION = stringPreferencesKey("backup_retention")
 
@@ -267,6 +263,9 @@ class AppSettingsRepository @Inject constructor(
         // behind device authentication unconditionally before these toggles existed.
         val KEY_BIOMETRIC_SEED_PHRASE_ENABLED = booleanPreferencesKey("biometric_seed_phrase_enabled")
         val KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED = booleanPreferencesKey("biometric_account_login_enabled")
+        /** Set once [KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED] was written after it went off by default
+         *  (iOS 953b255 `kachat_account_login_biometrics_off_migrated`). */
+        val KEY_ACCOUNT_LOGIN_BIOMETRICS_OFF_MIGRATED = booleanPreferencesKey("account_login_biometrics_off_migrated")
         val KEY_BIOMETRIC_SPENDING_KEY_ENABLED = booleanPreferencesKey("biometric_spending_key_enabled")
         // One-time ChangeNOW terms/liability disclaimer shown the first time Swap is opened.
         val KEY_SWAP_DISCLAIMER_AGREED = booleanPreferencesKey("swap_disclaimer_agreed")
@@ -639,8 +638,14 @@ class AppSettingsRepository @Inject constructor(
     val currency: Flow<String> = dataStore.data.map { it[KEY_CURRENCY] ?: "usd" }
 
     val biometricSeedPhraseEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_BIOMETRIC_SEED_PHRASE_ENABLED] ?: true }
-    // Account-login biometrics are opt-in (off by default) on every platform.
-    val biometricAccountLoginEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED] ?: false }
+    // Asked when signing back in to a saved account: off by default, so a phone with no passcode can
+    // still get in and see its account (owner's call, iOS 953b255). Users can turn it on. The words,
+    // private keys and sends still need the phone's lock. It went from on to off by default, and a
+    // saved value from before that counts as off: only one written since counts, which switches it
+    // off once per install and lets turning it back on stick.
+    val biometricAccountLoginEnabled: Flow<Boolean> = dataStore.data.map {
+        it[KEY_ACCOUNT_LOGIN_BIOMETRICS_OFF_MIGRATED] == true && it[KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED] == true
+    }
     /** Gates the "Export" button on a spending address's own screen - separate from
      *  [biometricSeedPhraseEnabled] since revealing one address's own derived key is lower-stakes
      *  than the wallet's whole seed phrase, but still sensitive enough to gate independently. */
@@ -825,16 +830,6 @@ class AppSettingsRepository @Inject constructor(
     /** Off by default — the user must explicitly turn this on, unlike iOS's iCloud sync. */
     val backupRetention: Flow<com.kachat.app.models.BackupRetention> = dataStore.data.map {
         com.kachat.app.models.BackupRetention.fromName(it[KEY_BACKUP_RETENTION])
-    }
-
-    val pendingKnsCommit: Flow<PendingKnsCommit?> = dataStore.data.map { prefs ->
-        prefs[KEY_PENDING_KNS_COMMIT]?.let { json ->
-            try {
-                Gson().fromJson(json, PendingKnsCommit::class.java)
-            } catch (e: Exception) {
-                null
-            }
-        }
     }
 
     /**
@@ -1101,7 +1096,10 @@ class AppSettingsRepository @Inject constructor(
     suspend fun setAppearance(value: com.kachat.app.models.AppAppearance) = dataStore.edit { it[KEY_APPEARANCE] = value.name }
     suspend fun setCurrency(value: String) = dataStore.edit { it[KEY_CURRENCY] = value }
     suspend fun setBiometricSeedPhraseEnabled(value: Boolean) = dataStore.edit { it[KEY_BIOMETRIC_SEED_PHRASE_ENABLED] = value }
-    suspend fun setBiometricAccountLoginEnabled(value: Boolean) = dataStore.edit { it[KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED] = value }
+    suspend fun setBiometricAccountLoginEnabled(value: Boolean) = dataStore.edit {
+        it[KEY_ACCOUNT_LOGIN_BIOMETRICS_OFF_MIGRATED] = true
+        it[KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED] = value
+    }
     suspend fun setBiometricSpendingKeyEnabled(value: Boolean) = dataStore.edit { it[KEY_BIOMETRIC_SPENDING_KEY_ENABLED] = value }
     suspend fun setChildModeEnabled(value: Boolean) = dataStore.edit { it[KEY_CHILD_MODE_ENABLED] = value }
     /** Called right before the first-run guide auto-presents. Never downgrades an already-made
@@ -1142,8 +1140,6 @@ class AppSettingsRepository @Inject constructor(
         else it.remove(KEY_KAPOSTS_DEFAULT_TIP_SOMPI)
     }
     suspend fun setBackupRetention(value: com.kachat.app.models.BackupRetention) = dataStore.edit { it[KEY_BACKUP_RETENTION] = value.name }
-    suspend fun setPendingKnsCommit(commit: PendingKnsCommit) = dataStore.edit { it[KEY_PENDING_KNS_COMMIT] = Gson().toJson(commit) }
-    suspend fun clearPendingKnsCommit() = dataStore.edit { it.remove(KEY_PENDING_KNS_COMMIT) }
     suspend fun setPaymentHistoryScanned(address: String, value: Boolean) = dataStore.edit { it[paymentHistoryScannedKey(address)] = value }
 
     /**
@@ -1174,6 +1170,9 @@ class AppSettingsRepository @Inject constructor(
 
     suspend fun setHandshakeOutSyncCursor(address: String, value: Long) = dataStore.edit { it[handshakeOutSyncCursorKey(address)] = value }
     suspend fun setShowSetupGuides(address: String, value: Boolean) = dataStore.edit { it[showSetupGuidesKey(address)] = value }
+
+    /** Its account is being removed (iOS 2da5f4b). */
+    suspend fun removeShowSetupGuides(address: String) = dataStore.edit { it.remove(showSetupGuidesKey(address)) }
 
     private fun paymentHistoryScannedKey(address: String) = booleanPreferencesKey("payment_history_scanned_$address")
     private fun heldPaymentsKey(wallet: String) = stringPreferencesKey("kachat_held_payments_${wallet.lowercase()}")

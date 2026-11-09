@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import androidx.compose.foundation.layout.statusBars
 import com.kachat.app.ui.theme.IosSymbols
 import com.kachat.app.ui.theme.iosGlass
@@ -54,6 +55,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.GppMaybe
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -103,6 +108,9 @@ import com.kachat.app.services.AddressActivityNotifier
 import com.kachat.app.services.ColdStorageAddressDiscovery
 import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.automirrored.filled.Reply
@@ -364,12 +372,15 @@ fun ActionSheetContainer(
     /** What iOS shows as a grouped List (the reactions sheet): the grouped light palette - see
      *  [com.kachat.app.ui.theme.IosSheetColors]. */
     grouped: Boolean = false,
+    /** Above the title: the Delete Account warning's triangle. */
+    headerIcon: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     ActionSheetContainer(
         title = title,
         subtitle = subtitle,
         onDismiss = onDismiss,
+        headerIcon = headerIcon,
         grouped = grouped,
         // Opens EXPANDED, not half-height. Partial expansion caps the opening height at about
         // half the screen, so a sheet with more than a few options opened already cut off - the
@@ -396,6 +407,7 @@ fun ActionSheetContainer(
     sheetState: SheetState,
     detail: String? = null,
     grouped: Boolean = false,
+    headerIcon: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = LocalAppColors.current
@@ -436,6 +448,7 @@ fun ActionSheetContainer(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        headerIcon?.invoke()
                         Text(
                             title,
                             color = colors.textPrimary,
@@ -470,6 +483,67 @@ fun ActionSheetContainer(
                 IosSheetGrabber(Modifier.align(Alignment.TopCenter))
             }
         }
+    }
+}
+
+/**
+ * The options button at the top right of every address page (the chatting address, each spending
+ * address, each Cold Storage address). Opens [AddressActionsSheet] (iOS 2da5f4b).
+ */
+@Composable
+fun AddressOptionsButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val haptic = com.kachat.app.util.rememberHaptics()
+    SheetBarIconButton(
+        Icons.Default.MoreHoriz,
+        stringResource(R.string.address_actions),
+        onClick = {
+            haptic(com.kachat.app.util.IosHaptic.IMPACT_LIGHT)
+            onClick()
+        },
+        modifier = modifier,
+    )
+}
+
+/**
+ * The same sheet on every address page (iOS 2da5f4b `AddressActionsSheet`). [onViewPrivateKey] is
+ * null where the app doesn't hold the key (Cold Storage); [showsPublicKey] is false on a quantum
+ * address, which keeps its key hidden until it spends, so it has none to show.
+ */
+@Composable
+fun AddressActionsSheet(
+    onViewPublicKey: () -> Unit,
+    onViewInExplorer: () -> Unit,
+    onDismiss: () -> Unit,
+    showsPublicKey: Boolean = true,
+    onViewPrivateKey: (() -> Unit)? = null,
+) {
+    ActionSheetContainer(
+        title = stringResource(R.string.address_actions),
+        subtitle = null,
+        onDismiss = onDismiss,
+    ) {
+        if (onViewPrivateKey != null) {
+            ActionSheetRow(
+                icon = Icons.Default.Key,
+                title = "View Private Key",
+                subtitle = "The key that spends this address. Never share it.",
+                onClick = onViewPrivateKey,
+            )
+        }
+        if (showsPublicKey) {
+            ActionSheetRow(
+                icon = Icons.Default.Numbers,
+                title = "View Public Key",
+                subtitle = "The public half of this address, for anyone who asks for it.",
+                onClick = onViewPublicKey,
+            )
+        }
+        ActionSheetRow(
+            icon = Icons.Default.Public,
+            title = stringResource(R.string.view_in_explorer),
+            subtitle = "Opens this address on your chosen block explorer.",
+            onClick = onViewInExplorer,
+        )
     }
 }
 
@@ -705,7 +779,7 @@ fun TransactionActionsSheet(
     onDismiss: () -> Unit,
 ) {
     ActionSheetContainer(
-        title = "Transaction",
+        title = tr(R.string.kp_transaction_1a7b7),
         subtitle = summary(tx, com.kachat.app.util.is24HourClock()),
         detail = AddressActivityNotifier.shortAddress(tx.txId),
         onDismiss = onDismiss,
@@ -718,7 +792,7 @@ fun TransactionActionsSheet(
         )
         ActionSheetRow(
             icon = Icons.Default.PieChart,
-            title = "Add to Portfolio",
+            title = tr(R.string.kp_add_to_portfolio_9eb23),
             subtitle = "Records it as a buy or a sell in a portfolio of your choosing.",
             onClick = onAddToPortfolio,
         )
@@ -727,7 +801,7 @@ fun TransactionActionsSheet(
 
 /** "Sent 12.5 KAS on Sep 3, 2026, 2:02 PM" - what is about to be acted on, in one line. */
 private fun summary(tx: ColdStorageAddressDiscovery.AddressTransaction, is24Hour: Boolean): String {
-    val direction = if (tx.sent) "Sent" else "Received"
+    val direction = if (tx.sent) tr(R.string.kp_sent_35f49) else tr(R.string.kp_received_27548)
     val amount = AddressActivityNotifier.formatKas(tx.amountSompi)
     val time = tx.blockTimeMillis?.let {
         com.kachat.app.util.IosDateStyle.mediumDateShortTime(it, is24Hour)
@@ -780,7 +854,96 @@ fun ConfirmActionSheet(
         }
         ActionSheetRow(
             icon = Icons.Default.Close,
-            title = "Cancel",
+            title = tr(R.string.kp_cancel_77dfd),
+            subtitle = "Leave everything as it is.",
+            onClick = onDismiss,
+        )
+    }
+}
+
+/**
+ * The warning before an account is deleted, from Settings or the sign-in screen (iOS 99ab88a).
+ * Nothing can bring the account back without its seed phrase (and passphrase), so it says that
+ * first. Deleting stays possible when no backup was made: an empty account someone doesn't want
+ * shouldn't have to be backed up first.
+ */
+@Composable
+fun DeleteAccountSheet(
+    /** What goes: the Delete row's second line. */
+    confirmSubtitle: String,
+    /** This account hasn't finished the backup steps: the warning says so. */
+    notBackedUp: Boolean = false,
+    /** Settings only: a signed-out account on the sign-in screen has no seed phrase open to show. */
+    onViewSeedPhrase: (() -> Unit)? = null,
+    /** Settings only: into the backup steps, in place of the seed phrase row. */
+    onBackUp: (() -> Unit)? = null,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ActionSheetContainer(
+        title = tr(R.string.kp_delete_account_ee1b9),
+        subtitle = null,
+        onDismiss = onDismiss,
+        headerIcon = {
+            Icon(
+                Icons.Default.Warning,
+                contentDescription = null,
+                tint = LocalAppColors.current.danger,
+                modifier = Modifier.padding(bottom = 8.dp).size(36.dp),
+            )
+        },
+    ) {
+        val colors = LocalAppColors.current
+        if (notBackedUp) {
+            Text(
+                tr(R.string.kp_this_account_isn_t_backed_up_9646a),
+                color = colors.danger,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+            )
+            if (onBackUp == null) {
+                Text(
+                    // The backup strip, not a card on the Wallet tab (iOS 0799cec).
+                    tr(R.string.kp_to_back_it_up_first_sign_fdb56),
+                    color = colors.textSecondary,
+                    fontSize = 15.sp,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+        Text(
+            tr(R.string.kp_make_sure_your_12_or_24_81a5d),
+            color = colors.textSecondary,
+            fontSize = 15.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        if (notBackedUp && onBackUp != null) {
+            ActionSheetRow(
+                icon = Icons.Outlined.GppMaybe,
+                title = tr(R.string.kp_back_up_account_e033f),
+                subtitle = "Write down your 12 or 24 words before you delete.",
+                onClick = onBackUp,
+            )
+        } else if (onViewSeedPhrase != null) {
+            ActionSheetRow(
+                icon = Icons.Outlined.Key,
+                title = "View 12 or 24 Words and Passphrase",
+                subtitle = "The passphrase shows too, if this account has one.",
+                onClick = onViewSeedPhrase,
+            )
+        }
+        ActionSheetRow(
+            icon = Icons.Outlined.Delete,
+            title = tr(R.string.kp_delete_account_ee1b9),
+            subtitle = confirmSubtitle,
+            tint = colors.danger,
+            onClick = { onDismiss(); onConfirm() },
+        )
+        ActionSheetRow(
+            icon = Icons.Default.Close,
+            title = tr(R.string.kp_cancel_77dfd),
             subtitle = "Leave everything as it is.",
             onClick = onDismiss,
         )

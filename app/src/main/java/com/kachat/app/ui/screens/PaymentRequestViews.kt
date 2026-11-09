@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -450,7 +451,7 @@ fun CreatePaymentRequestSheet(
                             .padding(top = 12.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        SendStepQuestion("Where do you want to be paid?")
+                        SendStepQuestion(tr(R.string.kp_where_do_you_want_to_be_8db47))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             SelectablePill(
                                 title = stringResource(R.string.pr_fresh_address),
@@ -473,7 +474,7 @@ fun CreatePaymentRequestSheet(
                                 if (fresh != null) {
                                     AddressResolutionCard(address = fresh)
                                     Text(
-                                        "A brand-new address of yours that has never been used or handed out.",
+                                        tr(R.string.kp_a_brand_new_address_of_yours_4c465),
                                         color = colors.textSecondary,
                                         fontSize = 13.sp,
                                     )
@@ -503,7 +504,7 @@ fun CreatePaymentRequestSheet(
                     canContinue = amountSompi != null,
                     onContinue = { go(PaymentRequestStep.REVIEW) },
                     onBack = { go(PaymentRequestStep.DESTINATION) },
-                    continueTitle = "Review",
+                    continueTitle = tr(R.string.kp_review_e29a7),
                     insets = noInsets,
                 ) {
                     Column(
@@ -513,10 +514,10 @@ fun CreatePaymentRequestSheet(
                             .padding(top = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        SendStepQuestion("How much?")
+                        SendStepQuestion(tr(R.string.kp_how_much_fa22a))
                         payeeAddress?.let { address ->
                             SendInfoPill {
-                                Text("Paid to")
+                                Text(tr(R.string.kp_paid_to_91219))
                                 Text("${address.take(14)}...${address.takeLast(6)}", fontFamily = FontFamily.Monospace)
                             }
                         }
@@ -533,7 +534,7 @@ fun CreatePaymentRequestSheet(
 
                 // MARK: Review
                 PaymentRequestStep.REVIEW -> SendStepScreen(
-                    title = "Review",
+                    title = tr(R.string.kp_review_e29a7),
                     onCancel = close,
                     canContinue = canMake && !isWorking,
                     onContinue = { copy() },
@@ -555,7 +556,7 @@ fun CreatePaymentRequestSheet(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Text("You're requesting", color = colors.textSecondary, fontSize = 15.sp)
+                            Text(tr(R.string.kp_you_re_requesting_c02d6), color = colors.textSecondary, fontSize = 15.sp)
                             amountSompi?.let { sompi ->
                                 PaymentRequestFitText(
                                     "${KaspaUnit.plain(sompi)} ${KaspaUnit.symbol}",
@@ -581,7 +582,7 @@ fun CreatePaymentRequestSheet(
 
                         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                "Paid to".uppercase(),
+                                tr(R.string.kp_paid_to_91219).uppercase(),
                                 color = colors.textSecondary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -706,8 +707,8 @@ private fun PaymentRequestFitText(
 
 /**
  * What a payment request asks for, above the amount on Send Kaspa (iOS `PaymentRequestSummary`):
- * the amount, the memo, how it is paid, and who made it - "Requested by" with that address's name
- * and picture once the signature checked out, else "Not signed".
+ * the amount, the memo, how it is paid, and who made it - "Requested by" with that address once
+ * the signature checked out, else "Not signed".
  */
 @Composable
 fun PaymentRequestSummary(request: PaymentRequest, modifier: Modifier = Modifier) {
@@ -745,7 +746,7 @@ fun PaymentRequestSummary(request: PaymentRequest, modifier: Modifier = Modifier
                 Icon(Icons.Filled.Verified, contentDescription = null, tint = colors.success, modifier = Modifier.size(14.dp))
                 Text(stringResource(R.string.pr_requested_by), color = colors.success, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
-            AddressResolutionCard(address = creator)
+            AddressResolutionCard(address = creator, addressOnly = true)
             if (!creator.equals(request.address, ignoreCase = true)) {
                 Text(stringResource(R.string.pr_signed_by_their_chatting), color = colors.textSecondary, fontSize = 12.sp)
             }
@@ -815,7 +816,7 @@ private fun OwnPaymentRequestSheet(request: PaymentRequest, onDismissed: () -> U
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     // iOS OwnPaymentRequestView: one heading and one footer, whichever address.
                     Text(
-                        "Paid to your address".uppercase(),
+                        tr(R.string.kp_paid_to_your_address_11aa0).uppercase(),
                         color = KaspaTeal,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,

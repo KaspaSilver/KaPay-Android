@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.util.tr
 import com.kachat.app.R
 import androidx.compose.ui.window.Dialog
 import androidx.compose.animation.AnimatedContent
@@ -122,6 +123,8 @@ import java.util.Locale
 @Composable
 fun ColdStorageListScreen(
     navController: NavController,
+    // MainShell's one WalletViewModel, for the backup banner (see PortfolioScreen).
+    walletViewModel: WalletViewModel,
     viewModel: ColdStorageViewModel = hiltViewModel(),
 ) {
     val accounts by viewModel.accounts.collectAsState()
@@ -161,7 +164,12 @@ fun ColdStorageListScreen(
         containerColor = LocalAppColors.current.background,
         // Runs on under the dock, as iOS's content runs on under its tab bar.
         contentWindowInsets = WindowInsets(0),
-        topBar = { MainPageHeader(title = stringResource(R.string.cold_storage)) },
+        topBar = {
+            MainPageHeader(
+                title = stringResource(R.string.cold_storage),
+                banner = { AccountBackupBanner(walletViewModel) { navController.navigate("account_backup") } },
+            )
+        },
         floatingActionButtonPosition = FabPosition.Center,
         floatingActionButton = {
             // Matches iOS's ColdStorageListView: "Paste kpub" (outlined, secondary) and "Scan"
@@ -275,7 +283,7 @@ fun ColdStorageListScreen(
                         // ColdStorageAccountActionsSheet.
                         var isRenaming by remember(account.id) { mutableStateOf(false) }
                         ActionSheetContainer(
-                            title = if (isRenaming) "Rename Account" else account.name,
+                            title = if (isRenaming) tr(R.string.kp_rename_account_90ddc) else account.name,
                             subtitle = if (isRenaming) null else {
                                 com.kachat.app.services.AddressActivityNotifier
                                     .shortAddress(account.kpub)
@@ -355,7 +363,7 @@ fun ColdStorageListScreen(
         QrCodeOverlay(
             value = account.kpub,
             onDismiss = { kpubQrAccount = null },
-            message = "Watch-only. This cannot spend, but it reveals every address in this account.",
+            message = tr(R.string.kp_watch_only_this_cannot_spend_but_95314),
             // A kpub is ~114 characters; the two-line default is for an address and would cut it.
             valueMaxLines = 5,
             copiedToast = "kpub copied to clipboard.",
@@ -451,7 +459,7 @@ fun ColdStorageListScreen(
                             fontSize = 17.sp,
                         )
                         Text(
-                            "Give this account a name so you can recognize it.",
+                            tr(R.string.kp_give_this_account_a_name_so_18d55),
                             color = colors.textSecondary,
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center,
@@ -590,7 +598,7 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
         contentWindowInsets = WindowInsets(0),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(account?.name ?: "Cold Storage", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp) },
+                title = { Text(account?.name ?: tr(R.string.kp_cold_storage_e1246), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp) },
                 navigationIcon = { SheetBarBackButton({ navController.popBackStack() }, Modifier.padding(start = 12.dp)) },
                 actions = {
                     // Address Visibility used to be an unlabelled checklist glyph up here. It is
@@ -631,7 +639,7 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                         Column(modifier = Modifier.weight(1f)) {
                             Text(stringResource(R.string.name), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                             Text(
-                                account?.name ?: "Cold Storage",
+                                account?.name ?: tr(R.string.kp_cold_storage_e1246),
                                 color = LocalAppColors.current.textPrimary,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
@@ -644,7 +652,7 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                             },
                             modifier = Modifier.size(32.dp)
                         ) {
-                            Icon(Icons.Default.Edit, "Rename", tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Edit, tr(R.string.kp_rename_d3f4c), tint = KaspaTeal, modifier = Modifier.size(18.dp))
                         }
                     }
                     Spacer(Modifier.height(16.dp))
@@ -728,7 +736,7 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
             } else if (visibleAddresses.isEmpty()) {
                 item {
                     Text(
-                        if (addresses.isEmpty()) "No addresses discovered yet." else "All addresses are hidden.",
+                        if (addresses.isEmpty()) tr(R.string.kp_no_addresses_discovered_yet_15738) else "All addresses are hidden.",
                         color = LocalAppColors.current.textSecondary
                     )
                 }
@@ -928,11 +936,11 @@ fun ColdStorageAddressVisibilityScreen(
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Address Visibility", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp) },
+                title = { Text(tr(R.string.kp_address_visibility_9c9a7), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp) },
                 // iOS 26: only Done, semibold, on a glass capsule (iOS's confirmation action) -
                 // the back arrow beside it did the same thing.
                 actions = {
-                    SheetBarButton("Done", onClick = onBack, emphasized = true, modifier = Modifier.padding(end = 12.dp))
+                    SheetBarButton(tr(R.string.kp_done_e9b45), onClick = onBack, emphasized = true, modifier = Modifier.padding(end = 12.dp))
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
             )
@@ -1049,7 +1057,7 @@ fun ColdStorageAddressVisibilityScreen(
                             fontWeight = FontWeight.Bold
                         )
                         used != null -> Text(
-                            if (used) "Used" else "Unused",
+                            if (used) tr(R.string.kp_used_02c0e) else tr(R.string.kp_unused_41369),
                             color = if (used) LocalAppColors.current.warning else LocalAppColors.current.success,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -1103,7 +1111,7 @@ private fun ColdAddressRow(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = row.label?.takeIf { it.isNotBlank() } ?: "Address #${row.index}",
+                    text = row.label?.takeIf { it.isNotBlank() } ?: tr(R.string.kp_address_lld_64ab3, row.index),
                     color = KaspaTeal,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
@@ -1128,8 +1136,8 @@ private fun ColdAddressRow(
                     // "Unverified" for snapshot-painted or failed-check rows — a failed check
                     // must not masquerade as a fresh address.
                     val (usedTagText, usedTagColor) = when {
-                        row.hasHistory -> "Used" to LocalAppColors.current.warning
-                        row.liveChecked -> "Unused" to LocalAppColors.current.success
+                        row.hasHistory -> tr(R.string.kp_used_02c0e) to LocalAppColors.current.warning
+                        row.liveChecked -> tr(R.string.kp_unused_41369) to LocalAppColors.current.success
                         else -> "Unverified" to LocalAppColors.current.textSecondary
                     }
                     Text(
@@ -1153,7 +1161,7 @@ private fun ColdAddressRow(
 
     if (showMenu) {
         ActionSheetContainer(
-            title = row.label ?: "Address #${row.index}",
+            title = row.label ?: tr(R.string.kp_address_lld_64ab3, row.index),
             subtitle = com.kachat.app.services.AddressActivityNotifier.shortAddress(row.address),
             onDismiss = { showMenu = false },
         ) {
@@ -1374,7 +1382,17 @@ private fun ColdSendFlow(
     } else {
         com.kachat.app.util.SendFeeModel.extraFee(defaultFeeSompi, feeTier.multiplier, customExtraFeeSompi)
     }
-    val effectiveFeeSompi = defaultFeeSompi + extraFeeSompi
+    // Change too small to keep goes to the fee, and the Review counts it (iOS 953b255
+    // `SendFeeEstimate`).
+    val foldedChangeSompi = remember(manualUtxos, previewSelection, amountSompi, baseFeeRateSompiPerGram, extraFeeSompi) {
+        val coins = manualUtxos?.takeIf { it.isNotEmpty() }
+        if (coins != null && amountSompi != null) {
+            com.kachat.app.util.SendFeeModel.manualFoldedChange(coins, amountSompi, baseFeeRateSompiPerGram, extraFeeSompi)
+        } else {
+            previewSelection?.foldedChangeSompi ?: 0L
+        }
+    }
+    val effectiveFeeSompi = defaultFeeSompi + extraFeeSompi + foldedChangeSompi
 
     // Debounced (400ms) — cancels and restarts automatically whenever any key changes, so a
     // burst of typing doesn't fire a network call per keystroke. No-ops entirely once coin
@@ -1582,7 +1600,7 @@ private fun ColdSendFlow(
     val toRow: @Composable () -> Unit = {
         ColdReviewRow(stringResource(R.string.to)) {
             if (isCompoundMode) {
-                Text("This address (consolidating)", color = colors.textPrimary, fontSize = 15.sp, textAlign = TextAlign.End)
+                Text(tr(R.string.kp_this_address_consolidating_d0ba3), color = colors.textPrimary, fontSize = 15.sp, textAlign = TextAlign.End)
             } else {
                 knsResolvedDomain?.let {
                     Text(it, color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
@@ -1683,7 +1701,7 @@ private fun ColdSendFlow(
                                 .padding(horizontal = 20.dp)
                                 .padding(top = 12.dp, bottom = 24.dp),
                         ) {
-                            SendStepQuestion("Who are you sending to?")
+                            SendStepQuestion(tr(R.string.kp_who_are_you_sending_to_2a7f1))
                             SendRecipientCard(
                                 input = toAddress,
                                 onInputChange = { toAddress = it },
@@ -1706,7 +1724,7 @@ private fun ColdSendFlow(
                         title = screenTitle,
                         onBack = { go(ColdFormStep.RECIPIENT) },
                         onCancel = onDone,
-                        continueTitle = "Review",
+                        continueTitle = tr(R.string.kp_review_e29a7),
                         canContinue = canBuild && !exceedsBalance && !isEstimatingMax,
                         onContinue = { go(ColdFormStep.REVIEW) },
                         insets = insets,
@@ -1734,7 +1752,7 @@ private fun ColdSendFlow(
                             isEstimatingMax = isEstimatingMax,
                             maxEnabled = hasValidRecipient,
                             footnote = if (exceedsBalance) {
-                                "This is more than the address you're sending from holds."
+                                tr(R.string.kp_this_is_more_than_the_address_7676b)
                             } else {
                                 KaspaUnit.label("Available: ${String.format(Locale.US, "%.8f", availableBalanceSompi / 100_000_000.0)} KAS")
                             },
@@ -1748,7 +1766,7 @@ private fun ColdSendFlow(
                         val isBuilding = sendState.step == ColdStorageViewModel.ColdSendStep.BUILDING
                         // A tap, not a swipe: this only builds the transaction for KasSigner to sign.
                         SendStepScreen(
-                            title = if (isCompoundMode) screenTitle else "Review",
+                            title = if (isCompoundMode) screenTitle else tr(R.string.kp_review_e29a7),
                             onBack = if (isCompoundMode) null else ({ go(ColdFormStep.AMOUNT) }),
                             onCancel = onDone,
                             continueTitle = if (isBuilding) "Building..." else stringResource(R.string.build_unsigned_transaction),
@@ -1766,7 +1784,7 @@ private fun ColdSendFlow(
                                     .padding(top = 12.dp, bottom = 24.dp),
                             ) {
                                 ColdSendAmountHeadline(
-                                    caption = if (isCompoundMode) "Consolidating" else "You're sending",
+                                    caption = if (isCompoundMode) tr(R.string.kp_consolidating_f7afc) else tr(R.string.kp_you_re_sending_e8358),
                                     amountSompi = amountSompi,
                                     showsProgressWhenEmpty = true,
                                     modifier = Modifier.padding(top = 8.dp),
@@ -1848,7 +1866,7 @@ private fun ColdSendFlow(
             // whatever the theme - a dark surround gives a camera photographing this screen far
             // less contrast around the code. Continue opens the scanner for the signed one.
             is ColdSendScreen.Qr -> SendStepScreen(
-                title = "Sign with KasSigner",
+                title = tr(R.string.kp_sign_with_kassigner_034f5),
                 onBack = backToForm,
                 onCancel = onDone,
                 continueTitle = stringResource(R.string.scan_signed_transaction),
@@ -1868,7 +1886,7 @@ private fun ColdSendFlow(
                     SendStepQuestion("Scan this on your KasSigner")
                     AnimatedQrDisplay(frames = shown.frames)
                     Text(
-                        "KasSigner shows what it is signing. Check it matches, sign, then scan the signed transaction it shows.",
+                        tr(R.string.kp_kassigner_shows_what_it_is_signing_6617a),
                         color = colors.textSecondary,
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center,
@@ -1917,16 +1935,16 @@ private fun ColdSendFlow(
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                     ) {
                         Icon(Icons.Default.Verified, contentDescription = null, tint = colors.success, modifier = Modifier.size(17.dp))
-                        Text("Signed by KasSigner", color = colors.success, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(tr(R.string.kp_signed_by_kassigner_8b310), color = colors.success, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     }
                     ColdSendAmountHeadline(
-                        caption = if (isCompoundMode) "Consolidating" else "You're sending",
+                        caption = if (isCompoundMode) tr(R.string.kp_consolidating_f7afc) else tr(R.string.kp_you_re_sending_e8358),
                         amountSompi = amountSompi,
                         showsProgressWhenEmpty = false,
                     )
                     summaryCard(shown.feeSompi)
                     Text(
-                        "Nothing can change now: this is the transaction KasSigner signed.",
+                        tr(R.string.kp_nothing_can_change_now_this_is_8bf3a),
                         color = colors.textSecondary,
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center,
@@ -2088,6 +2106,8 @@ fun CoinControlSheet(
     /** Cold Storage's coin labels for [fromAddress] (outpoint key "txId:index" -> label), shown
      *  over each coin's amount as iOS's coin control shows ColdStorageManager's. */
     utxoLabels: Map<String, String> = emptyMap(),
+    /** See [CoinControlScreen]: a hot-wallet send's coins with why it can't spend some of them. */
+    fetchCoinsWithReasons: (suspend (String) -> List<Pair<UtxoEntry, String?>>)? = null,
 ) {
     IosFullSheet(onDismissed = onDismiss, swipeToDismiss = true, grouped = true) { close ->
         BackHandler(onBack = close)
@@ -2099,6 +2119,7 @@ fun CoinControlSheet(
             onCancel = close,
             maxSelection = maxSelection,
             utxoLabels = utxoLabels,
+            fetchCoinsWithReasons = fetchCoinsWithReasons,
         )
     }
 }
@@ -2126,8 +2147,15 @@ fun CoinControlScreen(
      *  grows past it (see [com.kachat.app.util.CoinControlSelection]). */
     maxSelection: Int = com.kachat.app.util.KaspaUtxoSelector.MAX_INPUTS_PER_TRANSACTION,
     utxoLabels: Map<String, String> = emptyMap(),
+    /** A hot-wallet send's coins, each with why the send can't spend it (null when it can): those
+     *  are listed greyed out with the reason and never picked, so a selection can't be made of
+     *  coins the send would refuse (iOS 1652437 `CoinControlView.unavailableReason`). Null for
+     *  Cold Storage, whose coins the app doesn't hold back: [fetchUtxos] then lists them all. */
+    fetchCoinsWithReasons: (suspend (String) -> List<Pair<UtxoEntry, String?>>)? = null,
 ) {
     var utxos by remember { mutableStateOf<List<UtxoEntry>>(emptyList()) }
+    /** Why a listed coin can't be spent, by outpoint (see [fetchCoinsWithReasons]). */
+    var unavailable by remember { mutableStateOf<Map<com.kachat.app.services.Outpoint, String>>(emptyMap()) }
     var selectedKeys by remember { mutableStateOf<Set<com.kachat.app.services.Outpoint>>(emptySet()) }
     var isLoading by remember { mutableStateOf(false) }
     // The node could not be asked. Shown in place of "no coins": an outage must never read as an
@@ -2138,7 +2166,15 @@ fun CoinControlScreen(
     suspend fun loadUtxos() {
         isLoading = true
         try {
-            utxos = fetchUtxos(fromAddress)
+            val withReasons = fetchCoinsWithReasons
+            if (withReasons != null) {
+                val coins = withReasons(fromAddress)
+                utxos = coins.map { it.first }
+                unavailable = coins.mapNotNull { (utxo, reason) -> reason?.let { utxo.outpoint to it } }.toMap()
+            } else {
+                utxos = fetchUtxos(fromAddress)
+                unavailable = emptyMap()
+            }
             loadError = null
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -2148,17 +2184,20 @@ fun CoinControlScreen(
         isLoading = false
     }
 
+    /** The coins that can be picked: every listed one but those [unavailable] names. */
+    val availableUtxos = utxos.filter { it.outpoint !in unavailable }
     LaunchedEffect(fromAddress) {
         loadUtxos()
         if (!initialSelection.isNullOrEmpty()) {
+            // coins spent since they were picked drop out of the selection
             selectedKeys = com.kachat.app.util.CoinControlSelection
-                .resolve(utxos, initialSelection.map { it.outpoint }.toSet(), maxSelection)
+                .resolve(utxos.filter { it.outpoint !in unavailable }, initialSelection.map { it.outpoint }.toSet(), maxSelection)
                 .map { it.outpoint }.toSet()
         }
     }
-    val atCap = com.kachat.app.util.CoinControlSelection.isAtCap(selectedKeys.size, utxos.size, maxSelection)
+    val atCap = com.kachat.app.util.CoinControlSelection.isAtCap(selectedKeys.size, availableUtxos.size, maxSelection)
 
-    val selectedTotalSompi = utxos.filter { selectedKeys.contains(it.outpoint) }.sumOf { it.utxoEntry.amount }
+    val selectedTotalSompi = availableUtxos.filter { selectedKeys.contains(it.outpoint) }.sumOf { it.utxoEntry.amount }
 
     // iOS's CoinControlView: an inline bar (Cancel, "Coin Control", the ellipsis.circle menu), an
     // inset grouped list of the coins with the running total as its footer, and a capsule button
@@ -2187,7 +2226,7 @@ fun CoinControlScreen(
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.select_all)) },
-                            onClick = { selectedKeys = com.kachat.app.util.CoinControlSelection.selectAll(utxos, maxSelection); showMenu = false }
+                            onClick = { selectedKeys = com.kachat.app.util.CoinControlSelection.selectAll(availableUtxos, maxSelection); showMenu = false }
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.automatic_clear_selection)) },
@@ -2207,7 +2246,7 @@ fun CoinControlScreen(
                     .clip(CircleShape)
                     .background(KaspaTeal)
                     .clickable {
-                        val selected = com.kachat.app.util.CoinControlSelection.resolve(utxos, selectedKeys, maxSelection)
+                        val selected = com.kachat.app.util.CoinControlSelection.resolve(availableUtxos, selectedKeys, maxSelection)
                         onDone(selected.ifEmpty { null })
                     }
                     .padding(vertical = 16.dp),
@@ -2263,6 +2302,7 @@ fun CoinControlScreen(
                     }
                     itemsIndexed(utxos, key = { _, it -> "${it.outpoint.transactionId}:${it.outpoint.index}" }) { index, utxo ->
                         val isSelected = selectedKeys.contains(utxo.outpoint)
+                        val unavailableReason = unavailable[utxo.outpoint]
                         val first = index == 0
                         val last = index == utxos.lastIndex
                         val shape = RoundedCornerShape(
@@ -2273,13 +2313,14 @@ fun CoinControlScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
+                                    // a coin the send can't spend is never picked (iOS 1652437)
+                                    .clickable(enabled = unavailableReason == null) {
                                         // Past the cap the tap is refused; the note above says why.
                                         com.kachat.app.util.CoinControlSelection
                                             .toggle(selectedKeys, utxo.outpoint, maxSelection)
                                             ?.let { selectedKeys = it }
                                     }
-                                    .alpha(if (!isSelected && atCap) 0.5f else 1f)
+                                    .alpha(if (unavailableReason != null || (!isSelected && atCap)) 0.5f else 1f)
                                     .padding(horizontal = 16.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -2306,6 +2347,9 @@ fun CoinControlScreen(
                                         fontSize = 11.sp,
                                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                                     )
+                                    unavailableReason?.let { reason ->
+                                        Text(reason, color = colors.warning, fontSize = 11.sp)
+                                    }
                                 }
                             }
                             if (!last) HorizontalDivider(color = colors.divider, thickness = 0.5.dp, modifier = Modifier.padding(start = 50.dp))
@@ -2369,7 +2413,7 @@ fun ColdStorageTxHistoryScreen(
         addresses.firstOrNull { it.address == address } ?: resolvedRow?.takeIf { it.address == address }
     }
     val displayName = addressRow?.label?.takeIf { it.isNotBlank() }
-        ?: addressRow?.let { "Address #${it.index}" }
+        ?: addressRow?.let { tr(R.string.kp_address_lld_64ab3, it.index) }
         ?: address
     // Live balance for this address: the UTXO set when this screen has one, the account row's
     // balance otherwise.
@@ -2389,6 +2433,9 @@ fun ColdStorageTxHistoryScreen(
     var showQr by remember { mutableStateOf(false) }
     var showSendFlow by remember { mutableStateOf(false) }
     var showCompoundFlow by remember { mutableStateOf(false) }
+    // The "Address Actions" sheet, and the public-key screen it can open (iOS 2da5f4b).
+    var showAddressActions by remember { mutableStateOf(false) }
+    var showPublicKey by remember { mutableStateOf(false) }
     var utxoLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var labelingUtxoKey by remember { mutableStateOf<String?>(null) }
     var labelInput by remember { mutableStateOf("") }
@@ -2487,12 +2534,9 @@ fun ColdStorageTxHistoryScreen(
                     }
                 },
                 actions = {
-                    SheetBarIconButton(
-                        Icons.Default.Public,
-                        stringResource(R.string.view_in_explorer),
-                        onClick = { uriHandler.openUri(kaspaExplorer.addressUrl(address)) },
+                    AddressOptionsButton(
+                        onClick = { showAddressActions = true },
                         modifier = Modifier.padding(end = 12.dp),
-                        iconSize = 22.dp,
                     )
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
@@ -2579,7 +2623,7 @@ fun ColdStorageTxHistoryScreen(
                     txHistory.isEmpty() && historyIncomplete -> {
                         Box(modifier = Modifier.fillMaxSize().padding(bottom = barInset).padding(32.dp), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Could not load transactions.", color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
+                                Text(tr(R.string.kp_could_not_load_transactions_4bd4e), color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
                                 Text(
                                     stringResource(R.string.try_again),
                                     color = KaspaTeal,
@@ -2615,7 +2659,7 @@ fun ColdStorageTxHistoryScreen(
                             if (historyIncomplete) {
                                 item(key = "incomplete") {
                                     Text(
-                                        "Some transactions could not be loaded. Pull to refresh to try again.",
+                                        tr(R.string.kp_some_transactions_could_not_be_loaded_c11c5),
                                         color = LocalAppColors.current.warning,
                                         fontSize = 12.sp,
                                     )
@@ -2722,12 +2766,35 @@ fun ColdStorageTxHistoryScreen(
         QrCodeOverlay(value = address, onDismiss = { showQr = false })
     }
 
+    if (showAddressActions) {
+        // no View Private Key: a cold address's key stays on the signer
+        AddressActionsSheet(
+            onViewPublicKey = {
+                showAddressActions = false
+                showPublicKey = true
+            },
+            onViewInExplorer = {
+                showAddressActions = false
+                uriHandler.openUriOrToast(kaspaExplorer.addressUrl(address))
+            },
+            onDismiss = { showAddressActions = false },
+        )
+    }
+
+    if (showPublicKey) {
+        AddressPublicKeyOverlay(
+            address = address,
+            note = tr(R.string.kp_this_is_the_public_half_of_c5f98),
+            onDismiss = { showPublicKey = false },
+        )
+    }
+
     transactionActionTarget?.let { tapped ->
         TransactionActionsSheet(
             tx = tapped,
             onOpenExplorer = {
                 transactionActionTarget = null
-                uriHandler.openUri(kaspaExplorer.txUrl(tapped.txId))
+                uriHandler.openUriOrToast(kaspaExplorer.txUrl(tapped.txId))
             },
             onAddToPortfolio = {
                 transactionActionTarget = null
@@ -2841,7 +2908,7 @@ private fun ColdTxHistoryRow(tx: ColdStorageAddressDiscovery.AddressTransaction,
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(if (tx.sent) "Sent" else "Received", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+            Text(if (tx.sent) tr(R.string.kp_sent_35f49) else tr(R.string.kp_received_27548), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
             Text(dateStr, color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
             // What this transaction paid the network (iOS 9839906).
             transactionFeeText(tx.feeSompi)?.let {
@@ -2922,19 +2989,19 @@ private fun ColdStorageAddressActionsSheet(
                         Spacer(Modifier.height(8.dp))
                         com.kachat.app.ui.theme.IosActivityIndicator(color = KaspaTeal, strokeWidth = 3.dp, modifier = Modifier.size(32.dp))
                         Text(
-                            "Checking address #${progress?.checkingIndex ?: 0}",
+                            tr(R.string.kp_checking_address_lld_5b84c, progress?.checkingIndex ?: 0),
                             color = colors.textPrimary,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp,
                         )
                         Text(
                             if ((progress?.foundCount ?: 0) == 0) "No used addresses yet"
-                            else "${progress?.foundCount} found so far",
+                            else tr(R.string.kp_lld_found_so_far_c6c1d, progress?.foundCount),
                             color = colors.textSecondary,
                             fontSize = 12.sp,
                         )
                         Text(
-                            "Checks the first thousand addresses whatever the gaps, then keeps going while it keeps finding.",
+                            tr(R.string.kp_checks_the_first_thousand_addresses_whatever_90acf),
                             color = colors.textSecondary,
                             fontSize = 11.sp,
                             textAlign = TextAlign.Center,
@@ -2949,7 +3016,7 @@ private fun ColdStorageAddressActionsSheet(
                             modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(28.dp),
                         ) {
-                            Text("Close and Keep Scanning", color = KaspaTeal, fontWeight = FontWeight.SemiBold)
+                            Text(tr(R.string.kp_close_and_keep_scanning_b66cc), color = KaspaTeal, fontWeight = FontWeight.SemiBold)
                         }
                         Spacer(Modifier.height(8.dp))
                     } else {
@@ -2967,7 +3034,7 @@ private fun ColdStorageAddressActionsSheet(
                         )
                         ActionSheetRow(
                             icon = Icons.Default.Checklist,
-                            title = "Address Visibility",
+                            title = tr(R.string.kp_address_visibility_9c9a7),
                             subtitle = "Check off every address you want on the list, in one sitting.",
                             onClick = onVisibility,
                         )

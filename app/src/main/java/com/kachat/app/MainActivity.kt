@@ -7,11 +7,8 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -50,9 +47,12 @@ class MainActivity : AppCompatActivity() {
     // OwnAddressRoute.pending).
     private var pendingOwnAddress by mutableStateOf<String?>(null)
 
-    /** The privacy cover is up: the app isn't the thing in front (the app switcher, the
-     *  notification shade, a system prompt) - see [PrivacyCover]. */
-    private var privacyCovered by mutableStateOf(false)
+    /** The privacy cover's window, while the app isn't the thing in front (the app switcher, a
+     *  system prompt) - see [showPrivacyCover]. */
+    private var privacyCover: android.app.Dialog? = null
+    /** The app's background colour and appearance, once the theme has resolved them. */
+    private var privacyCoverBackground: Int? = null
+    private var privacyCoverIsDark: Boolean? = null
 
     // Android 13+'s notification permission is asked from the tabs, once, not at launch: see
     // MainShell's NotificationPermissionOnce (iOS wallet 1806a69).
@@ -65,8 +65,9 @@ class MainActivity : AppCompatActivity() {
     private fun handleLaunchIntent(intent: Intent?) {
         if (intent == null) return
         guarded("notification target") { consumeNotificationTarget(intent) }
-        // The only link the wallet opens; profile, public-chat and KaPosts links and the share
-        // target went with the chats (iOS wallet 301ebfb).
+        // The links the wallet opens; profile, public-chat and KaPosts links and the share target
+        // went with the chats (iOS wallet 301ebfb).
+        guarded("market link") { handleMarketDeepLink(intent) }
         guarded("payment request link") { handlePaymentRequestDeepLink(intent) }
         guarded("clear intent payload") { clearConsumedIntentPayload(intent) }
     }
@@ -110,7 +111,13 @@ class MainActivity : AppCompatActivity() {
                         onPendingOwnAddressHandled = { pendingOwnAddress = null }
                     )
                     CrashNotice()
-                    PrivacyCover(covered = privacyCovered)
+                    // The cover is drawn outside Compose (showPrivacyCover); it follows the app's
+                    // appearance (Settings' choice), which only the theme here knows.
+                    val colors = com.kachat.app.ui.theme.LocalAppColors.current
+                    androidx.compose.runtime.SideEffect {
+                        privacyCoverBackground = colors.background.toArgb()
+                        privacyCoverIsDark = colors.isDark
+                    }
                 }
             }
         }
@@ -120,50 +127,83 @@ class MainActivity : AppCompatActivity() {
     // (iOS handleScenePhaseChange: `showPrivacyCover = newPhase != .active`).
     override fun onResume() {
         super.onResume()
-        privacyCovered = false
+        hidePrivacyCover()
+    }
+
+    // Back in front, with focus, so the clipboard is readable: a copied secret whose 30 s ran out
+    // while the app was away (or whose Handler died with the process) is wiped now.
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) guarded("clipboard wipe") { com.kachat.app.util.wipeSensitiveClipIfDue(this) }
     }
 
     override fun onPause() {
-        privacyCovered = true
+        guarded("privacy cover") { showPrivacyCover() }
         super.onPause()
     }
 
+    override fun onDestroy() {
+        hidePrivacyCover()
+        super.onDestroy()
+    }
+
     /**
-     * What the app switcher and a system prompt see instead of the app's contents (iOS
-     * `PrivacyCoverView`): the screen hidden behind the background colour, and the wallet's own
-     * logo rounded like its icon - the dark-mode one (near-black tile, `tools/make_logo.py ...
-     * dark`) when the app is dark, the white one otherwise (iOS wallet 768daeb). Fades in and out
-     * in 0.15 s like iOS's. On Android 13+ the switcher's snapshot is switched off outright
-     * (`setRecentsScreenshotEnabled(false)` above); this covers the shade, prompts and older
-     * versions' snapshots.
+     * What the app switcher and a system prompt see instead of the app's contents (iOS 953b255
+     * `PrivacyCoverWindow`, `PrivacyCoverView`): a window of its own above the app, since a cover in
+     * the activity's own content sat underneath bottom sheets and dialogs, which are windows of their
+     * own and where the 12 or 24 words and private keys are shown. Solid, as large words can still be
+     * read through a light wash, with the wallet's own logo rounded like its icon - the dark-mode one
+     * (near-black tile, `tools/make_logo.py ... dark`) when the app is dark, the white one otherwise
+     * (iOS wallet 768daeb). It takes neither focus nor touches, so what's behind it is as it was.
+     *
+     * On Android 13+ the switcher's snapshot is switched off outright
+     * (`setRecentsScreenshotEnabled(false)` above); this covers system prompts and older versions'
+     * snapshots. Android doesn't pause an activity for the notification shade, and from here that
+     * looks the same as one of the app's own sheets taking focus, so the shade (which draws over the
+     * app itself) isn't covered, where iOS's Notification Center is.
      */
-    @androidx.compose.runtime.Composable
-    private fun PrivacyCover(covered: Boolean) {
-        val colors = com.kachat.app.ui.theme.LocalAppColors.current
-        androidx.compose.animation.AnimatedVisibility(
-            visible = covered,
-            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)),
-            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150)),
-        ) {
-            androidx.compose.foundation.layout.Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    // iOS's .ultraThinMaterial: here a near-opaque wash of the background, so
-                    // nothing behind it is readable on any Android version.
-                    .background(colors.background.copy(alpha = 0.97f)),
-                contentAlignment = androidx.compose.ui.Alignment.Center,
-            ) {
-                androidx.compose.foundation.Image(
-                    painter = androidx.compose.ui.res.painterResource(
-                        if (colors.isDark) R.drawable.kachat_wallet_logo_dark else R.drawable.kachat_wallet_logo
-                    ),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
-                )
+    private fun showPrivacyCover() {
+        if (privacyCover != null || isFinishing || isDestroyed) return
+        val isDark = privacyCoverIsDark
+            ?: ((resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES)
+        val background = privacyCoverBackground ?: if (isDark) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+        val density = resources.displayMetrics.density
+        val logoSize = (72 * density).toInt()
+        val logo = android.widget.ImageView(this).apply {
+            setImageResource(if (isDark) R.drawable.kachat_wallet_logo_dark else R.drawable.kachat_wallet_logo)
+            clipToOutline = true
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(view: android.view.View, outline: android.graphics.Outline) {
+                    outline.setRoundRect(0, 0, view.width, view.height, 16 * density)
+                }
             }
         }
+        val content = android.widget.FrameLayout(this).apply {
+            setBackgroundColor(background)
+            addView(logo, android.widget.FrameLayout.LayoutParams(logoSize, logoSize, android.view.Gravity.CENTER))
+        }
+        privacyCover = android.app.Dialog(this, android.R.style.Theme_Translucent_NoTitleBar).apply {
+            setCancelable(false)
+            setContentView(content)
+            window?.apply {
+                setBackgroundDrawable(android.graphics.drawable.ColorDrawable(background))
+                setLayout(android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT)
+                setWindowAnimations(0)
+                clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                addFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                        android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                        android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                )
+            }
+            show()
+        }
+    }
+
+    private fun hidePrivacyCover() {
+        guarded("privacy cover") { privacyCover?.dismiss() }
+        privacyCover = null
     }
 
     /**
@@ -308,6 +348,18 @@ class MainActivity : AppCompatActivity() {
     /** The host a KaChat web link arrives on (kachat.app, with or without www.). */
     private fun isKaChatWebHost(host: String?): Boolean =
         host?.lowercase()?.removePrefix("www.") == KaChatLink.WEB_HOST
+
+    /** `kapay://market` (or kachatwallet://): the .kachat Marketplace page, which KaChat's "Get a
+     *  domain" opens (iOS 953b255 `isMarketLink`). The pending flag survives a cold start and
+     *  sign-in, until the `.kachat` screen is up to take it. */
+    private fun handleMarketDeepLink(intent: Intent) {
+        if (intent.action != Intent.ACTION_VIEW) return
+        val uri = intent.data ?: return
+        val scheme = uri.scheme?.lowercase()
+        if (scheme != "kapay" && scheme != "kachatwallet") return
+        if (!uri.host.equals("market", ignoreCase = true) || uri.pathSegments.isNotEmpty()) return
+        com.kachat.app.ui.screens.KachatDeepLink.pendingMarketplace.value = true
+    }
 
     /** kapay://pay/<address>?... (or kachatwallet://, kachat://, https://kachat.app/pay/...) - someone's payment
      *  request (iOS c6851d6). Everything in it is checked - the address on this network, the exact

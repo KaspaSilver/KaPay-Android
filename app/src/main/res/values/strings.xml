@@ -13,7 +13,6 @@
     <string name="n_0_00">0.00</string>
     <string name="n_12_words">12 words</string>
     <string name="n_24_words">24 words</string>
-    <string name="a_kns_inscription_s_commit_transaction">A KNS inscription\'s commit transaction went through, but the reveal never finished. Retry now to complete it; the funds are safely tied up until you do.</string>
     <string name="accept">Accept</string>
     <string name="account_actions">Account Actions</string>
     <string name="account_name">Account Name</string>
@@ -36,7 +35,7 @@
     <string name="all_discovered_nodes_sorted_by_state">All discovered nodes sorted by state and latency. Nodes are deduplicated by host:port.</string>
     <string name="amount_kas">Amount (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">Anyone who joins the same channel name can see and post messages there. There\'s no owner or invite.</string>
-    <string name="anyone_with_your_seed_phrase_can">Anyone with your seed phrase can access your account. Never share it with anyone. Make sure you only write this down. Never take a screenshot or store it on your device.</string>
+    <string name="anyone_with_your_seed_phrase_can">Anyone with your 12 or 24 words can access your account. Never share them with anyone.</string>
     <string name="back">Back</string>
     <string name="previous">Previous</string>
     <string name="balance">Balance</string>
@@ -104,7 +103,7 @@
     <string name="battery_rationale_not_now_detail">Change it later in Settings &gt; Apps &gt; KaChat &gt; Battery.</string>
     <string name="open_source_licenses">Open Source Licenses</string>
     <string name="screen_lock_required">Screen Lock Required</string>
-    <string name="screen_lock_required_message">Set a screen lock on this phone (Settings &gt; Security) to view or unlock secret keys in KaPay.</string>
+    <string name="screen_lock_required_message">Set a screen lock on this phone (Settings &gt; Security) to send Kaspa, delete an account, or view secret keys in KaPay.</string>
     <string name="show_password">Show password</string>
     <string name="hide_password">Hide password</string>
     <string name="coin_control">Coin Control</string>
@@ -310,7 +309,6 @@
     <string name="resolving_domain">Resolving domain…</string>
     <string name="retention">Retention</string>
     <string name="retry">Retry</string>
-    <string name="retry_inscription_reveal">Retry Inscription Reveal</string>
     <string name="save">Save</string>
     <string name="saved_accounts">Saved Accounts</string>
     <string name="scan">Scan</string>
@@ -323,7 +321,7 @@
     <string name="search_coins">Search coins</string>
     <string name="secure_messaging_on_kaspa_blockdag">Secure messaging on Kaspa BlockDAG</string>
     <string name="security_warning">Security Warning</string>
-    <string name="seed_phrase">Seed Phrase</string>
+    <string name="seed_phrase">12 or 24 Words</string>
     <string name="select_time">Select Time</string>
     <string name="select_all">Select All</string>
     <string name="select_chat">Select chat</string>
@@ -348,7 +346,7 @@
     <string name="swaps_are_processed_by_changenow_a">Swaps are processed by ChangeNOW, a third-party exchange. By continuing, you confirm you\'ve read and agree to ChangeNOW\'s own Terms of Service. KaChat only submits your swap request and displays its status; KaChat is not responsible for failed, delayed, or lost swaps. If a swap doesn\'t go through, contact ChangeNOW support directly.</string>
     <string name="tap_an_address_below_to_swap">Tap an address below to swap from it</string>
     <string name="tap_an_address_below_to_use">Tap an address below to use it</string>
-    <string name="tap_to_reveal_seed_phrase">Tap to reveal seed phrase</string>
+    <string name="tap_to_reveal_seed_phrase">Tap to reveal your 12 or 24 words</string>
     <string name="this_could_take_a_few_minutes">This could take a few minutes while it confirms on-chain.</string>
     <string name="this_only_removes_it_from_kachat">This only removes it from KaPay\'s watch list. It has no effect on the KasSigner device or any funds it holds.</string>
     <string name="this_permanently_deletes_every_message_with">This permanently deletes every message with them on this device. This cannot be undone; messaging them again starts a brand new conversation.</string>
@@ -389,7 +387,7 @@
     <string name="banner">Banner</string>
     <string name="bio">Bio</string>
     <string name="biometrics_for_account_login">Biometrics for Account Login</string>
-    <string name="biometrics_for_seed_phrase">Biometrics for Seed Phrase</string>
+    <string name="biometrics_for_seed_phrase">Biometrics for 12 or 24 Words</string>
     <string name="biometrics_for_address_private_keys">Biometrics for Address Private Keys</string>
     <string name="calculating_fee">Calculating fee...</string>
     <string name="camera">Camera</string>
@@ -411,7 +409,7 @@
     <string name="explorer">Explorer</string>
     <string name="export_csv">Export CSV</string>
     <string name="exports_a_plaintext_json_file_of">Exports a plaintext JSON file of your decrypted chat history for this account. It is not encrypted, so only share it somewhere you trust. Importing merges into your existing history without overwriting anything.</string>
-    <string name="exports_app_device_info_connection_settings">Exports the app version, Android version, the wallet\'s settings and connection state, the Kaspa node pool and the app\'s recent logs as a zip, for troubleshooting with support. No private keys, seed phrases, addresses, contacts or portfolios are included.</string>
+    <string name="exports_app_device_info_connection_settings">Exports the app version, Android version, the wallet\'s settings and connection state, the Kaspa node pool and the app\'s recent logs as a zip, for troubleshooting with support. No private keys, 12 or 24 words, addresses, contacts or portfolios are included.</string>
     <string name="generate_more_addresses">Generate More Addresses</string>
     <string name="generate_new_spending_address">Generate New Spending Address</string>
     <string name="github">GitHub</string>
@@ -470,7 +468,7 @@
     <string name="version">Version</string>
     <string name="vibration">Vibration</string>
     <string name="view_profile">View Profile</string>
-    <string name="view_seed_phrase">View Seed Phrase</string>
+    <string name="view_seed_phrase">View 12 or 24 Words</string>
     <string name="view_in_explorer">View in Explorer</string>
     <string name="website">Website</string>
     <string name="x">X</string>
@@ -501,8 +499,8 @@
     <string name="transfer_your_domain_to_this_address">Transfer your domain to this address so your identity is connected to KaChat.</string>
 
     <!-- Import source-wallet chooser -->
-    <string name="where_is_this_seed_phrase_from">Where is this seed phrase from?</string>
-    <string name="different_wallets_store_your_kaspa">Different wallets store your Kaspa on different address paths. Pick where this seed phrase comes from so KaPay finds your funds and domains.</string>
+    <string name="where_is_this_seed_phrase_from">Where are your 12 or 24 words from?</string>
+    <string name="different_wallets_store_your_kaspa">Different wallets store your Kaspa on different address paths. Pick where these words come from so KaPay finds your funds and domains.</string>
     <string name="default_label">Default</string>
     <string name="continue_label">Continue</string>
 
@@ -661,7 +659,7 @@
     <!-- .kachat listing, buy and offer (iOS cd9e10c, 0e50fdf) -->
     <string name="kl_offers">Offers</string>
     <string name="kl_offer">Offer</string>
-    <string name="kl_offer_detail">Name your own price. Your KAS waits on chain until the seller accepts, you withdraw the offer, or it expires - and you can message the seller first.</string>
+    <string name="kl_offer_detail">Name your own price. Your KAS waits on chain until the seller accepts, you withdraw the offer, or it expires.</string>
     <string name="kl_listing">Listing</string>
     <string name="kl_price">Price</string>
     <string name="kl_buy_now">Buy Now</string>
@@ -1147,7 +1145,7 @@
     <string name="create_wallet_name_title">Create a name for your wallet</string>
     <string name="create_wallet_name_detail">This name is only stored on this device, to tell your wallets apart. No one else will ever see it.</string>
     <string name="create_wallet_seed_next_warning">The next screen shows your seed phrase. It is the only way to recover your account: write it down and store it securely, and make sure no one can see your screen.</string>
-    <string name="choose_seed_phrase_length">Choose seed phrase length</string>
+    <string name="choose_seed_phrase_length">Choose 12 or 24 words</string>
     <!-- Create Account, step 3: the seed phrase (iOS CreateWalletSeedStep) -->
     <string name="write_down_your_seed_phrase">Write Down Your Seed Phrase</string>
     <string name="store_this_in_a_safe_place_anyone_with_these_words">Store this in a safe place. Anyone with these words can access your account.</string>
@@ -1238,10 +1236,10 @@
     <string name="kn_commit_waiting_busy">The network is busy. Your commit is waiting for a block.</string>
     <string name="kn_commit_sent_again">The network is busy, so the commit was sent again.</string>
     <!-- Onboarding: import length step and the seed phrase explainer (iOS dd0aab1) -->
-    <string name="import_seed_length_detail">How many words is the seed phrase you\'re importing?</string>
+    <string name="import_seed_length_detail">How many words are you importing?</string>
     <string name="what_is_this">What is this?</string>
-    <string name="what_is_a_seed_phrase">What is a seed phrase?</string>
-    <string name="seed_phrase_explainer_master_key">A seed phrase is a list of 12 or 24 ordinary words that works as the master key to your account. Your wallet, your chatting address and your messages all come from it.</string>
+    <string name="what_is_a_seed_phrase">What are my 12 or 24 words?</string>
+    <string name="seed_phrase_explainer_master_key">Your 12 or 24 words are ordinary words that work as the master key to your account. Your wallet, its addresses and your .kachat names all come from them.</string>
     <string name="seed_phrase_explainer_anyone">Anyone who has these words can take everything in your account. If you lose them and lose this device, nobody can get your account back, not even KaPay.</string>
     <string name="seed_phrase_explainer_paper">Write the words on paper, in order, and keep them somewhere safe and private. Never type them into a website, send them in a chat, or keep them in a screenshot or cloud notes.</string>
     <string name="seed_phrase_explainer_lengths">12 words are already very secure. 24 words add even more protection.</string>
@@ -1256,9 +1254,9 @@
     <string name="cache_web_responses">Web Responses</string>
     <string name="cache_web_responses_detail">Link previews and API responses held by the system\'s network cache.</string>
     <string name="cache_temporary_files">Temporary Files</string>
-    <string name="cache_temporary_files_detail">Scratch files from sending photos and voice notes. Safe to remove at any time.</string>
+    <string name="cache_temporary_files_detail">Temporary files the app no longer needs. Safe to remove at any time.</string>
     <!-- Import Account, the words screen (iOS ImportWalletView) -->
-    <string name="import_words_enter_recovery_phrase">Enter your recovery phrase</string>
+    <string name="import_words_enter_recovery_phrase">Enter your 12 or 24 words</string>
     <string name="import_words_continue">Continue</string>
     <!-- .kachat Renew: choose the period first (iOS 26bd5dc) -->
     <string name="kn_how_long">How long?</string>
@@ -1587,7 +1585,7 @@
     <string name="resync_select_chats">Select Chats...</string>
     <string name="resync_select_chats_subtitle">Pick which chats to wipe and re-sync. Everything else is left alone.</string>
     <string name="resync_cancel_subtitle">Leave your messages as they are.</string>
-    <string name="unlock_change_seed_phrase_lock">Unlock to change the seed phrase biometric lock</string>
+    <string name="unlock_change_seed_phrase_lock">Unlock to change the 12 or 24 words biometric lock</string>
     <string name="unlock_change_account_login_lock">Unlock to change the account login biometric lock</string>
     <string name="unlock_change_private_key_lock">Unlock to change the private key biometric lock</string>
     <!-- Settings > Storage > Nextcloud, as iOS's NextcloudSettingsView (English only there too) -->
@@ -1697,7 +1695,7 @@
     <string name="ncw_restore_backup">Restore Backup</string>
     <string name="ncw_backed_up">Backed up</string>
     <string name="ncw_not_backed_up_yet">Not backed up yet</string>
-    <string name="ncw_backup_footer">Your contacts (names, notes and photos) are saved as \"%1$s\" and your portfolios with their transactions as \"%2$s\", both in the %3$s folder. Automatic Backup uploads them a few seconds after you change either. Restoring merges the backup into this device: no address is deleted, and a portfolio or transaction deleted on another device is removed here too. Connecting a wallet to a server that has a backup restores it once by itself.</string>
+    <string name="ncw_backup_footer">Your contacts (names, notes and photos) are saved as \"%1$s\" and your portfolios with their transactions as \"%2$s\", both in the %3$s folder. Automatic Backup uploads them a few seconds after you change either, and brings in changes from your other devices when you open the app. Restoring merges the backup into this device: no address is deleted, and a portfolio or transaction deleted on another device is removed here too. Connecting a wallet to a server that has a backup restores it once by itself.</string>
     <string name="ncw_disconnect_footer">Disconnecting removes the stored app password from this device. The backup stays on your Nextcloud server.</string>
     <string name="ncw_restore_message">Your contacts and Portfolio from the backup are merged into this device. No contact is deleted; portfolios and transactions deleted on another device are removed here too.</string>
     <string name="ncw_backed_up_message">Contacts and Portfolio backed up.</string>
@@ -1715,4 +1713,13 @@
     <string name="compound_utxos_spending_description">Combines this address\'s UTXOs to reduce the inputs a future send needs. A single transaction can only merge so many at once, so if this address has a very large number, tap Compound again after it confirms to keep reducing.</string>
     <string name="address_visibility_derive_failed">These addresses couldn\'t be derived right now. Go back a page or reopen this screen to retry.</string>
     <string name="ab_no_contacts">No contacts yet</string>
+    <!-- What a locked screen shows in place of a notification's amount, address or name. -->
+    <string name="notif_public_received">Received Kaspa</string>
+    <string name="notif_public_kachat_name">.kachat name update</string>
+    <!-- Notification channel names (system settings): one per sound/vibration combination. -->
+    <string name="notif_channel_sound_vibrate">Wallet: Sound and Vibration</string>
+    <string name="notif_channel_sound_only">Wallet: Sound Only</string>
+    <string name="notif_channel_vibrate_only">Wallet: Vibration Only</string>
+    <string name="notif_channel_silent">Wallet: Silent</string>
+    <string name="no_app_to_open_link">No app on this phone can open the link</string>
 </resources>

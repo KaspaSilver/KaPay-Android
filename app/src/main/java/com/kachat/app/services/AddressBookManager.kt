@@ -59,9 +59,9 @@ data class AddressBookTombstone(val address: String, val deletedAt: Long)
  * Contacts access can read. The Address Book lives only in KaChat:
  * - one per wallet, like chats and contacts, so switching wallets never shows who another wallet
  *   knows;
- * - on this device (SharedPreferences, the same per-wallet keys iOS keeps in UserDefaults) and in
- *   the wallet's chat backup (`addressBook` + `addressBookDeleted` in the archive,
- *   NEXTCLOUD_SYNC.md §5), so a restore or another device brings it back.
+ * - on this device (SharedPreferences, the same per-wallet keys iOS keeps in UserDefaults), and on
+ *   the user's Nextcloud when they connect one ([NextcloudSyncService]: the export file, encrypted,
+ *   in `kachat-contacts.json`, iOS 953b255), so a restore or another device brings it back.
  *
  * A saved name is also how KaChat shows that address when you haven't named the chat contact
  * yourself ([com.kachat.app.models.addressDisplayName]).
@@ -107,6 +107,10 @@ class AddressBookManager @Inject constructor(
         override fun sizeOf(key: String, value: android.graphics.Bitmap): Int = value.byteCount
     }
 
+    /** Addresses known to have no photo. Every avatar in the app asks on every redraw, and most
+     *  addresses have none, so that answer mustn't cost a hash and a file check (iOS 953b255). */
+    private val photolessAddresses: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     private val _entries = MutableStateFlow<List<AddressBookEntry>>(emptyList())
     /** This wallet's entries, sorted by name. */
     val entries: StateFlow<List<AddressBookEntry>> = _entries.asStateFlow()
@@ -146,6 +150,7 @@ class AddressBookManager @Inject constructor(
         }
         publish(Book(wallet, sorted(stored), deleted))
         photoCache.evictAll()
+        photolessAddresses.clear()
         photoVersion++
         return wallet
     }
@@ -242,10 +247,15 @@ class AddressBookManager @Inject constructor(
     /** The photo you assigned to [address], if any. */
     fun photo(address: String?): android.graphics.Bitmap? {
         if (address.isNullOrBlank()) return null
-        val file = photoFile(normalize(address)) ?: return null
+        val normalized = normalize(address)
+        if (normalized in photolessAddresses) return null
+        val file = photoFile(normalized) ?: return null
         photoCache.get(file.path)?.let { return it }
-        if (!file.exists()) return null
-        val bitmap = decodePhotoFile(file) ?: return null
+        val bitmap = if (file.exists()) decodePhotoFile(file) else null
+        if (bitmap == null) {
+            photolessAddresses.add(normalized)
+            return null
+        }
         photoCache.put(file.path, bitmap)
         return bitmap
     }
@@ -313,8 +323,25 @@ class AddressBookManager @Inject constructor(
         }
         photosRoot().deleteRecursively()
         photoCache.evictAll()
+        photolessAddresses.clear()
         photoVersion++
         if (current.wallet != null) didChange()
+    }
+
+    /** Delete Account: one wallet's book, tombstones and assigned photos, from this device
+     *  (iOS 99ab88a). */
+    @Synchronized
+    fun removeAllData(walletAddress: String) {
+        val wallet = normalize(walletAddress)
+        if (wallet.isEmpty()) return
+        if (book.wallet == wallet) {
+            publish(Book(null, emptyList(), emptyMap()))
+            photoCache.evictAll()
+            photolessAddresses.clear()
+            photoVersion++
+        }
+        prefs.edit().remove(ENTRIES_KEY_PREFIX + wallet).remove(DELETED_KEY_PREFIX + wallet).apply()
+        photosDirectory(wallet).deleteRecursively()
     }
 
     private fun photosRoot(): java.io.File = java.io.File(context.filesDir, "AddressBookPhotos")
@@ -336,6 +363,7 @@ class AddressBookManager @Inject constructor(
             if (!tmp.renameTo(file)) { file.delete(); tmp.renameTo(file) }
         }.onFailure { Log.w(TAG, "Could not save an Address Book photo", it) }
         photoCache.remove(file.path)
+        photolessAddresses.remove(normalizedAddress)
         photoVersion++
     }
 
@@ -344,24 +372,28 @@ class AddressBookManager @Inject constructor(
         if (!file.exists()) return
         file.delete()
         photoCache.remove(file.path)
+        photolessAddresses.remove(normalizedAddress)
         photoVersion++
     }
 
     // MARK: - Export / import (Address Book > import-export sheet, iOS 87b2a0b)
 
     /** Why an import was refused; the UI localizes it (iOS `AddressBookManager.ImportError`).
-     *  [OTHER_NETWORK]: every address in the file is the other network's (iOS 218dc42, IOS-063). */
-    enum class ImportError { NOT_AN_ADDRESS_BOOK, EMPTY, OTHER_NETWORK }
+     *  [OTHER_NETWORK]: every address in the file is the other network's (iOS 218dc42, IOS-063).
+     *  [NEWER_VERSION]: written by a newer version of the app: never merged, and so never written
+     *  over (iOS 953b255). */
+    enum class ImportError { NOT_AN_ADDRESS_BOOK, EMPTY, OTHER_NETWORK, NEWER_VERSION }
 
     /** What an import did: entries added, entries updated, and other-network entries skipped. */
     data class ImportResult(val added: Int, val updated: Int, val skipped: Int)
 
     /** The message is iOS's `ImportError.errorDescription`, for where it is shown as is (a
-     *  Nextcloud restore); the Address Book's own import shows [reason]'s translated string. */
+     *  Nextcloud backup); the Address Book's own import shows [reason]'s translated string. */
     class ImportException(val reason: ImportError) : Exception(
         when (reason) {
             ImportError.NOT_AN_ADDRESS_BOOK -> "That file isn't a contacts export."
             ImportError.EMPTY -> "That contacts export has no contacts."
+            ImportError.NEWER_VERSION -> "That contacts file is from a newer version of the app. Update the app to read it."
             ImportError.OTHER_NETWORK -> if (com.kachat.app.util.KaspaNetwork.isTestnet) {
                 "Every address in that file is a Mainnet address. KaPay is on Testnet."
             } else {
@@ -375,8 +407,10 @@ class AddressBookManager @Inject constructor(
      * Android, Desktop) and any wallet - `{type: "kachat-address-book", version: 1, exportedAt,
      * walletAddress, entries}`, every entry with its assigned photo (base64 JPEG) attached. Keys
      * sorted and dates in ISO 8601 whole seconds, as iOS's encoder writes it (NEXTCLOUD_SYNC.md §1).
+     * [includingDeleted] is for the Nextcloud backup: what was deleted, so a merge doesn't bring it
+     * back, in `deleted`, which other readers of the file ignore (iOS 99ab88a).
      */
-    fun exportData(): ByteArray {
+    fun exportData(includingDeleted: Boolean = false): ByteArray {
         val entries = com.google.gson.JsonArray()
         for (e in archiveEntries()) {
             entries.add(com.google.gson.JsonObject().apply {
@@ -390,6 +424,16 @@ class AddressBookManager @Inject constructor(
             })
         }
         val file = com.google.gson.JsonObject().apply {
+            if (includingDeleted) {
+                add("deleted", com.google.gson.JsonArray().apply {
+                    for (t in archiveTombstones()) {
+                        add(com.google.gson.JsonObject().apply {
+                            addProperty("address", t.address)
+                            addProperty("deletedAt", t.deletedAt)
+                        })
+                    }
+                })
+            }
             add("entries", entries)
             addProperty("exportedAt", isoSeconds(System.currentTimeMillis()))
             addProperty("type", EXPORT_KIND)
@@ -417,6 +461,7 @@ class AddressBookManager @Inject constructor(
         val type = runCatching { root.get("type")?.asString }.getOrNull()
         val rawEntries = runCatching { root.getAsJsonArray("entries") }.getOrNull()
         if (type != EXPORT_KIND || rawEntries == null) throw ImportException(ImportError.NOT_AN_ADDRESS_BOOK)
+        if (isNewerVersion(root)) throw ImportException(ImportError.NEWER_VERSION)
         // Like iOS's Codable decode, one entry that can't be read makes the whole file "not an
         // Address Book export"; readable entries with a bad address are then skipped.
         val decoded = rawEntries.map { element ->
@@ -453,6 +498,13 @@ class AddressBookManager @Inject constructor(
                 updated++
             } else {
                 if (list.any { it.id == incoming.id }) incoming = incoming.copy(id = UUID.randomUUID().toString().uppercase())
+                // Bringing back a deleted contact is a new edit: with the file's older date, the
+                // deletion (here and on the server) would win again at the next merge. The files
+                // keep whole seconds, so it goes past the deletion's second (iOS 1652437).
+                deleted[address]?.let { deletedAt ->
+                    val afterDeletion = Math.floorDiv(deletedAt, 1000L) * 1000L + 1000L
+                    incoming = incoming.copy(updatedAt = maxOf(System.currentTimeMillis(), afterDeletion))
+                }
                 list.add(incoming)
                 index[address] = list.size - 1
                 if (photo != null) writePhoto(photo, address)
@@ -467,6 +519,79 @@ class AddressBookManager @Inject constructor(
     }
 
     // MARK: - Backup
+
+    /** Each address's last edit and what's deleted, to the second (the file's dates are), to tell
+     *  whether two copies of the book say the same. */
+    private data class BookSummary(val edits: Map<String, Long>, val deleted: Set<String>) {
+        constructor(entries: List<AddressBookEntry>, deleted: Collection<String>) : this(
+            entries.groupBy({ normalize(it.address) }, { it.updatedAt / 1000 }).mapValues { it.value.max() },
+            deleted.map(::normalize).toSet(),
+        )
+    }
+
+    data class BackupMerge(val changedHere: Boolean, val serverIsBehind: Boolean)
+
+    /** The file says it's from a newer version of the app than this one reads. */
+    private fun isNewerVersion(root: com.google.gson.JsonObject): Boolean =
+        (runCatching { root.get("version")?.asInt }.getOrNull() ?: 1) > 1
+
+    /** The book is the one for this account: a slow Nextcloud call can outlive an account switch. */
+    fun holdsWallet(address: String): Boolean = book.wallet == normalize(address)
+
+    /** Anything worth putting in the contacts file. */
+    val hasBackupData: Boolean get() = book.entries.isNotEmpty() || book.deleted.isNotEmpty()
+
+    /**
+     * Merges the Nextcloud backup into this book, the newest edit or deletion winning per address,
+     * before an upload or when the app opens (iOS 99ab88a `mergeBackup`). Unlike importing a file,
+     * a deletion stays deleted. A file another account uploaded (accounts can share a Nextcloud
+     * login) is left out, so one account's contacts never land in another. `serverIsBehind`: this
+     * book has something the file doesn't, so it's worth uploading.
+     */
+    @Synchronized
+    @Throws(SaveException::class, ImportException::class)
+    fun mergeBackup(data: ByteArray): BackupMerge {
+        val wallet = book.wallet ?: throw SaveException(SaveError.NO_WALLET)
+        val root = runCatching {
+            com.google.gson.JsonParser.parseString(String(data, Charsets.UTF_8)).asJsonObject
+        }.getOrNull() ?: throw ImportException(ImportError.NOT_AN_ADDRESS_BOOK)
+        val type = runCatching { root.get("type")?.asString }.getOrNull()
+        val rawEntries = runCatching { root.getAsJsonArray("entries") }.getOrNull()
+        if (type != EXPORT_KIND || rawEntries == null) throw ImportException(ImportError.NOT_AN_ADDRESS_BOOK)
+        if (isNewerVersion(root)) throw ImportException(ImportError.NEWER_VERSION)
+        val owner = runCatching { root.get("walletAddress")?.takeIf { !it.isJsonNull }?.asString }.getOrNull()
+        if (owner != null && normalize(owner) != wallet) {
+            return BackupMerge(false, hasBackupData)
+        }
+        val archived = rawEntries.map { element ->
+            runCatching { gson.fromJson(element, ArchiveAddressBookEntry::class.java) }.getOrNull()
+                ?: throw ImportException(ImportError.NOT_AN_ADDRESS_BOOK)
+        }
+        // Newest wins, so a date past now would win over every later edit here for good: no file
+        // gets to date a change after the moment it's read (iOS 1652437).
+        val now = System.currentTimeMillis()
+        val entries = archived.filter { it.toEntry() != null && KaspaAddress.isValidOnActiveNetwork(normalize(it.address.orEmpty())) }
+            .map { e ->
+                val updated = parseDate(e.updatedAt)
+                if (updated != null && updated > now) e.copy(updatedAt = isoSeconds(now)) else e
+            }
+        val tombstones = runCatching { root.getAsJsonArray("deleted") }.getOrNull()
+            ?.mapNotNull { runCatching { gson.fromJson(it, ArchiveAddressBookTombstone::class.java) }.getOrNull() }
+            .orEmpty()
+            .map { t ->
+                val deletedAt = parseDate(t.deletedAt)
+                if (deletedAt != null && deletedAt > now) t.copy(deletedAt = isoSeconds(now)) else t
+            }
+        val before = BookSummary(book.entries, book.deleted.keys)
+        importFromArchive(wallet, entries, tombstones)
+        val after = BookSummary(book.entries, book.deleted.keys)
+        val server = merge(
+            listOf(entries.mapNotNull { it.toEntry() }),
+            listOf(tombstones.mapNotNull { t -> parseDate(t.deletedAt)?.let { AddressBookTombstone(t.address, it) } }),
+        )
+        val onServer = BookSummary(server.first, server.second.map { it.address })
+        return BackupMerge(after != before, after != onServer)
+    }
 
     /** What the chat backup carries for this wallet: each entry with its assigned photo (base64
      *  JPEG) attached. */
@@ -536,7 +661,7 @@ class AddressBookManager @Inject constructor(
 
     /** A user edit: the backup owes an upload. */
     private fun didChange() {
-        runCatching { nextcloudSyncService.get().noteBackupDataChanged() }
+        runCatching { nextcloudSyncService.get().noteContactActivity() }
     }
 
     private fun persist() {
@@ -652,8 +777,18 @@ class AddressBookManager @Inject constructor(
             if (value.isEmpty()) return null
             runCatching { return Instant.parse(value).toEpochMilli() }
             runCatching { return java.time.OffsetDateTime.parse(value).toInstant().toEpochMilli() }
-            return value.toDoubleOrNull()?.let { ((it + APPLE_REFERENCE_EPOCH_S) * 1000).toLong() }
+            // Exact decimal, rounded to the millisecond: a Double sum truncated by toLong() reads
+            // "783212345.123" as ...122 ms, so an unchanged file never compared equal and every
+            // backup uploaded it again.
+            runCatching {
+                return java.math.BigDecimal(value).add(APPLE_REFERENCE_EPOCH)
+                    .movePointRight(3).setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
+            }
+            return value.toDoubleOrNull()?.takeIf { it.isFinite() }
+                ?.let { Math.round((it + APPLE_REFERENCE_EPOCH_S) * 1000) }
         }
+
+        private val APPLE_REFERENCE_EPOCH = java.math.BigDecimal.valueOf(978_307_200L)
 
         private const val APPLE_REFERENCE_EPOCH_S = 978_307_200.0
 
