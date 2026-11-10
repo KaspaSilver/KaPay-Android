@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kachat.app.models.ImportAccountCandidate
 import com.kachat.app.models.WalletSourceFamily
 import com.kachat.app.repository.AppSettingsRepository
 import com.kachat.app.services.ColdStorageAddressDiscovery
@@ -27,6 +28,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -1633,44 +1636,77 @@ class WalletViewModel @Inject constructor(
      * a different, empty account — so it's only collected on the next screen.
      */
     /**
-     * Source-wallet derivation family picked on the import chooser (the screen shown BEFORE seed
-     * entry). Carried in memory across the chooser -> seed -> passphrase steps, then persisted on
-     * the account by [commitImport]. Reset to the default whenever a fresh import run starts.
+     * The wallet type and address the import should open: found by the passphrase step's
+     * auto-detect or picked there (iOS 018e634 `ImportAccountChoice`), or read from an NFC card.
+     * In memory only, persisted on the account by [commitImport]. Reset to Standard #0 whenever a
+     * fresh import run starts.
      */
     private var pendingSourceFamily: WalletSourceFamily = WalletSourceFamily.KASPA_STANDARD
-
-    fun setPendingSourceFamily(family: WalletSourceFamily) {
-        pendingSourceFamily = family
-    }
-
-    /** The address the passphrase step found or the user picked there (iOS 4f5dfd2). Only with a
-     *  passphrase: without one the account is the seed's address #0. */
     private var pendingChattingAddressIndex: Int = 0
 
-    fun setPendingChattingAddressIndex(index: Int) {
+    fun setPendingImportChoice(family: WalletSourceFamily, index: Int) {
+        pendingSourceFamily = family
         pendingChattingAddressIndex = index
     }
 
-    /** An address the import's passphrase step found on the identity chain. */
-    data class FoundChattingAddress(val index: Int, val address: String, val balanceSompi: Long)
+    /** Address #0 of every wallet type the pending words could be, for "See Every Wallet Type"
+     *  (iOS 018e634 `importAddressesAtZero`). Needs no network. */
+    fun importAddressesAtZero(passphrase: String): List<ImportAccountCandidate> {
+        val words = pendingMnemonicWords
+        if (words.isEmpty()) return emptyList()
+        return WalletSourceFamily.entries.flatMap { family ->
+            walletManager.previewIdentityAddresses(words, passphrase, family, 0..0)
+                .map { (index, address) -> ImportAccountCandidate(family, index, address) }
+        }
+    }
 
     /**
-     * For an import's passphrase step, before there's an account: address #0 plus every other
-     * address among the first 50 on the identity chain holding funds, in index order. Null when
-     * the words are unusable or the balances couldn't be checked (iOS 4f5dfd2).
+     * Import's auto-detect (iOS 018e634 `findImportAccounts`): every wallet type's addresses
+     * ([WalletSourceFamily.importSearchDepth]), keeping the ones with funds, plus any address #0
+     * with transaction history (a chat identity or an emptied wallet holds no coins). The wallet
+     * type holding the most comes first, ties going to the earlier type, and each type's addresses
+     * are in index order, so the first entry is the likeliest account. Empty when nothing has any
+     * activity; null when the words are unusable or the balances couldn't be checked.
      */
-    suspend fun findChattingAddresses(passphrase: String): List<FoundChattingAddress>? {
+    suspend fun findImportAccounts(passphrase: String): List<ImportAccountCandidate>? {
         val words = pendingMnemonicWords
         if (words.isEmpty()) return null
-        val family = pendingSourceFamily
-        val derived = withContext(Dispatchers.Default) {
-            walletManager.previewIdentityAddresses(words, passphrase, family, 0 until CHATTING_ADDRESS_SCAN_BATCH)
+        val candidates = withContext(Dispatchers.Default) {
+            WalletSourceFamily.entries.flatMap { family ->
+                walletManager.previewIdentityAddresses(words, passphrase, family, family.importSearchDepth)
+                    .map { (index, address) -> ImportAccountCandidate(family, index, address) }
+            }
         }
-        if (derived.isEmpty()) return null
-        val balances = walletEngine.nodeBalances(derived.map { it.second }) ?: return null
-        return derived.mapNotNull { (index, address) ->
-            val balance = balances[address] ?: 0L
-            if (index == 0 || balance > 0) FoundChattingAddress(index, address, balance) else null
+        if (candidates.isEmpty()) return null
+        return kotlinx.coroutines.coroutineScope {
+            val balancesAsync = async { walletEngine.nodeBalances(candidates.map { it.address }) }
+            val historyAsync = candidates.filter { it.index == 0 }.map { candidate ->
+                async { if (walletEngine.addressHasHistory(candidate.address)) candidate.address else null }
+            }
+            val balances = balancesAsync.await()
+            if (balances == null) {
+                historyAsync.forEach { it.cancel() }
+                return@coroutineScope null
+            }
+            val withHistory = historyAsync.awaitAll().filterNotNull().toSet()
+            val totals = HashMap<WalletSourceFamily, Long>()
+            val active = candidates.mapNotNull { candidate ->
+                val found = candidate.copy(
+                    balanceSompi = balances[candidate.address] ?: 0L,
+                    hasHistory = candidate.address in withHistory,
+                )
+                if (found.balanceSompi <= 0 && !found.hasHistory) return@mapNotNull null
+                totals[found.family] = (totals[found.family] ?: 0L) + found.balanceSompi
+                found
+            }
+            active.sortedWith { lhs, rhs ->
+                if (lhs.family == rhs.family) return@sortedWith lhs.index.compareTo(rhs.index)
+                val left = totals[lhs.family] ?: 0L
+                val right = totals[rhs.family] ?: 0L
+                if (left != right) right.compareTo(left)
+                // Ties go to the earlier type, so the standard wallet wins when nothing tells them apart.
+                else lhs.family.ordinal.compareTo(rhs.family.ordinal)
+            }
         }
     }
 
@@ -1745,16 +1781,19 @@ class WalletViewModel @Inject constructor(
         }
         pendingAccountName = name
         pendingMnemonicWords = words
+        // the passphrase step's search picks the wallet type and address (iOS 018e634)
+        pendingSourceFamily = WalletSourceFamily.KASPA_STANDARD
         pendingChattingAddressIndex = 0
         _importWalletState.value = ImportWalletUiState() // clear any prior FAILED before advancing
         return true
     }
 
-    /** The chatting address the pending seed would produce with [passphrase] - drives the live
-     *  preview on the passphrase entry screen. See [WalletManager.previewIdentityAddress]. */
+    /** The standard address #0 the pending seed would produce with [passphrase] - drives the live
+     *  preview on the passphrase screens until the import's search picks the account (iOS 018e634
+     *  passes `.kaspaStandard`). See [WalletManager.previewIdentityAddress]. */
     fun previewChattingAddress(passphrase: String): String? =
         if (pendingMnemonicWords.isEmpty()) null
-        else walletManager.previewIdentityAddress(pendingMnemonicWords, passphrase, pendingSourceFamily)
+        else walletManager.previewIdentityAddress(pendingMnemonicWords, passphrase, WalletSourceFamily.KASPA_STANDARD)
 
     /** What [address] holds for the passphrase entry screen's Balance, or null when neither a node
      *  nor the REST gateway answered (iOS 99ab88a). */
@@ -1774,8 +1813,10 @@ class WalletViewModel @Inject constructor(
             try {
                 val words = pendingMnemonicWords
                 val name = pendingAccountName
+                // With or without a passphrase, the account the search found or the user picked
+                // (iOS 018e634: imports without one no longer always open address #0).
                 val family = pendingSourceFamily
-                val chattingIndex = if (passphrase.isEmpty()) 0 else pendingChattingAddressIndex
+                val chattingIndex = pendingChattingAddressIndex
                 // the derivation and the synchronous save stay off the main thread
                 withContext(Dispatchers.Default) {
                     walletManager.importWallet(words, name, passphrase, family = family, chattingAddressIndex = chattingIndex)

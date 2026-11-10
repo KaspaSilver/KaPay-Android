@@ -3,7 +3,6 @@ package com.kachat.app.ui.screens
 import com.kachat.app.util.tr
 import android.app.Activity
 import android.view.WindowManager
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -56,7 +55,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.kachat.app.R
-import com.kachat.app.models.SourceWalletOption
+import com.kachat.app.models.ImportAccountCandidate
 import com.kachat.app.models.WalletSourceFamily
 import com.kachat.app.services.WalletManager
 import com.kachat.app.ui.theme.KaspaTeal
@@ -66,6 +65,7 @@ import com.kachat.app.util.CreateAccountSteps
 import com.kachat.app.util.authenticateWithDeviceCredential
 import com.kachat.app.util.hasDeviceCredential
 import com.kachat.app.viewmodels.WalletViewModel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
@@ -91,34 +91,26 @@ fun OnboardingScreen(viewModel: WalletViewModel) {
                     // silently logging into whatever account is currently active instead of
                     // letting the user type a new phrase.
                     viewModel.resetImportWalletState()
-                    // KasWare-style source-wallet chooser comes FIRST, before seed entry — the
-                    // choice sets the identity derivation family the seed is read with.
-                    navController.navigate("import_source")
-                }
-            )
-        }
-        composable("import_source") {
-            ImportSourceWalletScreen(
-                onBack = { navController.popBackStack() },
-                onContinue = { family ->
-                    viewModel.setPendingSourceFamily(family)
+                    // No "where are your words from?" list: the passphrase step finds the wallet
+                    // type from the words (iOS 018e634).
                     navController.navigate("import_name")
-                },
-                onRestoreFromNfcCard = {
-                    viewModel.resetImportWalletState()
-                    navController.navigate("nfc_card_restore")
                 }
             )
         }
         composable("nfc_card_restore") {
             NfcCardRestoreScreen(viewModel, onBack = { navController.popBackStack() })
         }
-        // Import Account after the source wallet (iOS dd0aab1): the name (the same screen as
-        // Create Account's first step), the seed length, the words, then the passphrase.
+        // Import Account (iOS dd0aab1, 018e634): the name (the same screen as Create Account's
+        // first step, with Restore from NFC Card at the bottom), the seed length, the words, then
+        // the passphrase step, which finds the wallet those words belong to.
         composable("import_name") {
             ImportNameScreen(
                 onBack = { navController.popBackStack() },
-                onNext = { name -> navController.navigate("import_length?name=${android.net.Uri.encode(name)}") }
+                onNext = { name -> navController.navigate("import_length?name=${android.net.Uri.encode(name)}") },
+                onRestoreFromNfcCard = {
+                    viewModel.resetImportWalletState()
+                    navController.navigate("nfc_card_restore")
+                }
             )
         }
         composable(
@@ -189,8 +181,9 @@ fun OnboardingScreen(viewModel: WalletViewModel) {
                 onBack = { navController.popBackStack() },
                 previewAddress = { viewModel.previewChattingAddress(it) },
                 previewBalance = { viewModel.previewAddressBalanceSompi(it) },
-                findChattingAddresses = { viewModel.findChattingAddresses(it) },
-                onSelectChattingIndex = { viewModel.setPendingChattingAddressIndex(it) },
+                findImportAccounts = { viewModel.findImportAccounts(it) },
+                importAddressesAtZero = { viewModel.importAddressesAtZero(it) },
+                onSelectImportChoice = { family, index -> viewModel.setPendingImportChoice(family, index) },
                 // commitImport() imports with the passphrase, arms the guide, and logs in on success.
                 onProceed = { passphrase -> viewModel.commitImport(passphrase) }
             )
@@ -687,14 +680,36 @@ fun SavedAccountCard(
 }
 
 /**
- * Import Account, after the source wallet ([ImportSourceWalletScreen]; iOS dd0aab1
- * `ImportNameStep`): the account's name, local to this device - the same screen as Create
- * Account's first step. Then the seed length ([ImportLengthScreen]), the words
- * ([ImportWalletScreen]), and the optional passphrase.
+ * Import Account's first screen (iOS dd0aab1, 018e634 `ImportNameStep`): the account's name,
+ * local to this device - the same screen as Create Account's first step - with Restore from NFC
+ * Card at the bottom. Then the seed length ([ImportLengthScreen]), the words
+ * ([ImportWalletScreen]), and the passphrase step, which finds the wallet those words belong to.
  */
 @Composable
-fun ImportNameScreen(onBack: () -> Unit, onNext: (String) -> Unit) {
-    AccountNameForm(title = stringResource(R.string.import_account), onBack = onBack, onNext = onNext)
+fun ImportNameScreen(onBack: () -> Unit, onNext: (String) -> Unit, onRestoreFromNfcCard: () -> Unit = {}) {
+    val nfcAvailable = com.kachat.app.services.NfcCard.isAvailable(LocalContext.current)
+    AccountNameForm(
+        title = stringResource(R.string.import_account),
+        onBack = onBack,
+        onNext = onNext,
+        footer = if (!nfcAvailable) null else {
+            {
+                // iOS: a plain subheadline-semibold button in the bottom safe area, 12 pt above and below.
+                Row(
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(onClick = onRestoreFromNfcCard)
+                        .padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(Icons.Default.Contactless, contentDescription = null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                    Text(tr(R.string.kp_restore_from_nfc_card_85639), color = KaspaTeal, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        },
+    )
 }
 
 /**
@@ -702,7 +717,12 @@ fun ImportNameScreen(onBack: () -> Unit, onNext: (String) -> Unit) {
  * name local to this device. Next stays off until there is a name; [onNext] gets it trimmed.
  */
 @Composable
-private fun AccountNameForm(title: String, onBack: () -> Unit, onNext: (String) -> Unit) {
+private fun AccountNameForm(
+    title: String,
+    onBack: () -> Unit,
+    onNext: (String) -> Unit,
+    footer: (@Composable () -> Unit)? = null,
+) {
     val colors = LocalAppColors.current
     // Starts empty on purpose: the name is the user's choice. Kept across the trip to the next
     // step and back, as iOS keeps it.
@@ -718,7 +738,7 @@ private fun AccountNameForm(title: String, onBack: () -> Unit, onNext: (String) 
         }
     }
 
-    CreateAccountStepScaffold(title = title, onBack = onBack) {
+    CreateAccountStepScaffold(title = title, onBack = onBack, footer = footer) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = stringResource(R.string.create_wallet_name_title),
@@ -851,9 +871,43 @@ internal fun SeedPhraseExplainerPage(onBack: () -> Unit) {
 private fun CreateAccountStepScaffold(
     title: String = stringResource(R.string.create_account),
     onBack: () -> Unit,
+    /** Pinned under the scrolling steps, above the keyboard (iOS `safeAreaInset(edge: .bottom)`). */
+    footer: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val colors = LocalAppColors.current
+    if (footer != null) {
+        Surface(color = colors.background, modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .imePadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(24.dp)
+                ) {
+                    SheetBarIconButton(Icons.Filled.ArrowBackIosNew, stringResource(R.string.back), onClick = onBack, tint = LocalAppColors.current.textPrimary)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(24.dp), content = content)
+                }
+                footer()
+            }
+        }
+        return
+    }
     Surface(color = colors.background, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -1180,9 +1234,11 @@ fun PassphraseSetupScreen(
     /** What an address holds, for the balance under the live preview; null when it couldn't be
      *  checked. */
     previewBalance: suspend (String) -> Long? = { null },
-    /** An import: looks for the address holding funds (iOS 4f5dfd2). */
-    findChattingAddresses: (suspend (String) -> List<WalletViewModel.FoundChattingAddress>?)? = null,
-    onSelectChattingIndex: (Int) -> Unit = {},
+    /** An import: searches every wallet type for the account these words open (iOS 018e634). */
+    findImportAccounts: (suspend (String) -> List<ImportAccountCandidate>?)? = null,
+    /** Address #0 of every wallet type, for "See Every Wallet Type". */
+    importAddressesAtZero: (String) -> List<ImportAccountCandidate> = { emptyList() },
+    onSelectImportChoice: (WalletSourceFamily, Int) -> Unit = { _, _ -> },
     onProceed: (String) -> Unit
 ) {
     // Creating only reaches here through "Advanced: Create with a Passphrase", which has already
@@ -1209,7 +1265,7 @@ fun PassphraseSetupScreen(
             mode == PassphraseMode.CREATE && passphrase != confirm ->
                 localError = "The passphrases do not match. Please re-enter them."
             else -> {
-                if (skippingSearch) onSelectChattingIndex(0)
+                if (skippingSearch) onSelectImportChoice(WalletSourceFamily.KASPA_STANDARD, 0)
                 onProceed(passphrase)
             }
         }
@@ -1224,7 +1280,12 @@ fun PassphraseSetupScreen(
         if (mode == PassphraseMode.CREATE) onBack() else step = PassphraseStep.QUESTION
     }
     BackHandler(enabled = step != PassphraseStep.QUESTION) {
-        if (step == PassphraseStep.EXPLAINER) step = explainerReturnStep else backFromEntry()
+        when (step) {
+            PassphraseStep.EXPLAINER -> step = explainerReturnStep
+            // Nothing changes the account once it is being made (iOS disables Back there).
+            PassphraseStep.FOUND -> if (!isBusy) step = PassphraseStep.QUESTION
+            else -> backFromEntry()
+        }
     }
 
     Surface(color = colors.background, modifier = Modifier.fillMaxSize()) {
@@ -1233,7 +1294,18 @@ fun PassphraseSetupScreen(
                 mode = mode,
                 isBusy = isBusy,
                 onYes = { step = PassphraseStep.ENTRY },
-                onNo = { if (!isBusy) onProceed("") },
+                onNo = {
+                    if (!isBusy) {
+                        if (findImportAccounts != null) {
+                            // Held from here, not only once the search starts: Import must not be
+                            // tappable before the search has run (iOS 018e634).
+                            isSearchingAddresses = true
+                            step = PassphraseStep.FOUND
+                        } else {
+                            onProceed("")
+                        }
+                    }
+                },
                 onExplain = {
                     explainerReturnStep = PassphraseStep.QUESTION
                     step = PassphraseStep.EXPLAINER
@@ -1251,8 +1323,9 @@ fun PassphraseSetupScreen(
                 onToggleReveal = { reveal = !reveal },
                 previewAddress = previewAddress,
                 previewBalance = previewBalance,
-                findChattingAddresses = findChattingAddresses,
-                onSelectChattingIndex = onSelectChattingIndex,
+                findImportAccounts = findImportAccounts,
+                importAddressesAtZero = importAddressesAtZero,
+                onSelectImportChoice = onSelectImportChoice,
                 isSearchingAddresses = isSearchingAddresses,
                 onSearchingChange = { isSearchingAddresses = it },
                 onSubmit = { submitFromEntry() },
@@ -1262,6 +1335,24 @@ fun PassphraseSetupScreen(
                     step = PassphraseStep.EXPLAINER
                 },
                 onBack = { backFromEntry() },
+            )
+            PassphraseStep.FOUND -> PassphraseFoundStep(
+                isBusy = isBusy,
+                previewAddress = previewAddress,
+                previewBalance = previewBalance,
+                findImportAccounts = findImportAccounts,
+                importAddressesAtZero = importAddressesAtZero,
+                onSelectImportChoice = onSelectImportChoice,
+                isSearchingAddresses = isSearchingAddresses,
+                onSearchingChange = { isSearchingAddresses = it },
+                onImport = { if (!isBusy && !isSearchingAddresses) onProceed("") },
+                onSkipSearch = {
+                    if (!isBusy) {
+                        onSelectImportChoice(WalletSourceFamily.KASPA_STANDARD, 0)
+                        onProceed("")
+                    }
+                },
+                onBack = { step = PassphraseStep.QUESTION },
             )
             PassphraseStep.EXPLAINER -> PassphraseExplainerStep(
                 mode = mode,
@@ -1286,7 +1377,8 @@ fun PassphraseSetupScreen(
     }
 }
 
-private enum class PassphraseStep { QUESTION, ENTRY, EXPLAINER }
+/** `FOUND`: import with no passphrase - the wallet these words were found in (iOS 018e634). */
+private enum class PassphraseStep { QUESTION, ENTRY, FOUND, EXPLAINER }
 
 /** How long Import waits for the funds search before letting go and importing onto #0 (iOS
  *  1652437 `PassphraseAddressPreview.searchTimeoutNanoseconds`). */
@@ -1406,8 +1498,9 @@ private fun PassphraseEntryStep(
     onToggleReveal: () -> Unit,
     previewAddress: (String) -> String?,
     previewBalance: suspend (String) -> Long?,
-    findChattingAddresses: (suspend (String) -> List<WalletViewModel.FoundChattingAddress>?)?,
-    onSelectChattingIndex: (Int) -> Unit,
+    findImportAccounts: (suspend (String) -> List<ImportAccountCandidate>?)?,
+    importAddressesAtZero: (String) -> List<ImportAccountCandidate>,
+    onSelectImportChoice: (WalletSourceFamily, Int) -> Unit,
     isSearchingAddresses: Boolean,
     onSearchingChange: (Boolean) -> Unit,
     onSubmit: () -> Unit,
@@ -1485,8 +1578,9 @@ private fun PassphraseEntryStep(
                 previewAddress = previewAddress,
                 previewBalance = previewBalance,
                 showsFundsHint = mode == PassphraseMode.IMPORT,
-                findAddresses = findChattingAddresses,
-                onSelectIndex = onSelectChattingIndex,
+                findAddresses = findImportAccounts,
+                addressesAtZero = importAddressesAtZero,
+                onSelect = onSelectImportChoice,
                 onSearchingChange = onSearchingChange,
                 enabled = !isBusy,
             )
@@ -1541,12 +1635,105 @@ private fun PassphraseEntryStep(
 }
 
 /**
+ * Import with no passphrase (iOS 018e634 `foundScreen`): the wallet these words were found in.
+ * KaPay checks every kind of Kaspa wallet, picks the likeliest account and lists the others.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PassphraseFoundStep(
+    isBusy: Boolean,
+    previewAddress: (String) -> String?,
+    previewBalance: suspend (String) -> Long?,
+    findImportAccounts: (suspend (String) -> List<ImportAccountCandidate>?)?,
+    importAddressesAtZero: (String) -> List<ImportAccountCandidate>,
+    onSelectImportChoice: (WalletSourceFamily, Int) -> Unit,
+    isSearchingAddresses: Boolean,
+    onSearchingChange: (Boolean) -> Unit,
+    onImport: () -> Unit,
+    onSkipSearch: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val colors = LocalAppColors.current
+    Scaffold(
+        containerColor = colors.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(stringResource(R.string.import_account), color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 17.sp) },
+                navigationIcon = {
+                    SheetBarIconButton(Icons.Filled.ArrowBackIosNew, tr(R.string.kp_back_b52b3), onClick = onBack, modifier = Modifier.padding(start = 12.dp), enabled = !isBusy, tint = LocalAppColors.current.textPrimary)
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            // iOS: .title3 bold.
+            Text(tr(R.string.kp_your_account_d7913), color = colors.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(
+                tr(R.string.kp_kapay_checks_your_words_against_every_5bb67),
+                color = colors.textSecondary,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            PassphraseAddressPreview(
+                passphrase = "",
+                previewAddress = previewAddress,
+                previewBalance = previewBalance,
+                showsFundsHint = true,
+                findAddresses = findImportAccounts,
+                addressesAtZero = importAddressesAtZero,
+                onSelect = onSelectImportChoice,
+                onSearchingChange = onSearchingChange,
+                enabled = !isBusy,
+            )
+            Column {
+                Button(
+                    onClick = onImport,
+                    enabled = !isBusy && !isSearchingAddresses,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = KaspaTeal,
+                        contentColor = Color.White,
+                        disabledContainerColor = if (isBusy) KaspaTeal else IosGray,
+                        disabledContentColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    if (isBusy) {
+                        com.kachat.app.ui.theme.IosActivityIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    } else if (isSearchingAddresses) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            com.kachat.app.ui.theme.IosActivityIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                            Text(tr(R.string.kp_finding_your_address_72ab6), fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                        }
+                    } else {
+                        Text(tr(R.string.kp_import_d6fbc), fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                    }
+                }
+                // The search is a network round trip: never the only way forward.
+                if (isSearchingAddresses && !isBusy) {
+                    TextButton(onClick = onSkipSearch, modifier = Modifier.fillMaxWidth()) {
+                        Text(tr(R.string.kp_skip_the_search_import_on_address_04c3f), color = KaspaTeal, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * The whole reason this screen shows an address: a passphrase does not protect one account, it opens
  * a different one. Watching #0 change with every character is what makes that concrete, and on
  * import it is how someone confirms they typed the right thing before committing to an account that
- * would otherwise look simply empty. With [findAddresses] (an import, whose chatting address isn't
- * known yet) it checks the first addresses on the identity chain, picks the first with funds, and
- * lets the user pick another (iOS 4f5dfd2 `PassphraseAddressPreview`).
+ * would otherwise look simply empty. With [findAddresses] (an import, whose account isn't known yet)
+ * it searches every wallet type, picks the likeliest account, and lets the user pick another (iOS
+ * 018e634 `PassphraseAddressPreview`).
  */
 @Composable
 internal fun PassphraseAddressPreview(
@@ -1554,8 +1741,10 @@ internal fun PassphraseAddressPreview(
     previewAddress: (String) -> String?,
     previewBalance: suspend (String) -> Long?,
     showsFundsHint: Boolean,
-    findAddresses: (suspend (String) -> List<WalletViewModel.FoundChattingAddress>?)? = null,
-    onSelectIndex: (Int) -> Unit = {},
+    findAddresses: (suspend (String) -> List<ImportAccountCandidate>?)? = null,
+    /** Address #0 of every wallet type, for words the search can't place. */
+    addressesAtZero: (String) -> List<ImportAccountCandidate> = { emptyList() },
+    onSelect: (WalletSourceFamily, Int) -> Unit = { _, _ -> },
     /** True while the [findAddresses] search runs, so the caller can hold its Import until the
      *  pick is made (iOS 0799cec `isSearching`). */
     onSearchingChange: (Boolean) -> Unit = {},
@@ -1569,18 +1758,29 @@ internal fun PassphraseAddressPreview(
     // What [shownAddress] holds: null while looking it up, or when the lookup failed.
     var balanceSompi by remember { mutableStateOf<Long?>(null) }
     var balanceFailed by remember { mutableStateOf(false) }
-    var foundAddresses by remember { mutableStateOf(emptyList<WalletViewModel.FoundChattingAddress>()) }
-    var selectedIndex by remember { mutableIntStateOf(0) }
+    var shownHasHistory by remember { mutableStateOf(false) }
+    // What the search found, likeliest first.
+    var foundAddresses by remember { mutableStateOf(emptyList<ImportAccountCandidate>()) }
+    var everyWalletType by remember { mutableStateOf(emptyList<ImportAccountCandidate>()) }
+    var showsEveryWalletType by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf(WalletSourceFamily.KASPA_STANDARD to 0) }
+    var searching by remember { mutableStateOf(false) }
     // The funds search failed or ran out of time: Import goes to #0, and the screen says so
     // (iOS 1652437 `searchIncomplete`). Search Again bumps [searchAttempt] to run it once more.
     var searchIncomplete by remember { mutableStateOf(false) }
     var searchAttempt by remember { mutableIntStateOf(0) }
 
-    fun select(found: WalletViewModel.FoundChattingAddress) {
-        selectedIndex = found.index
-        onSelectIndex(found.index)
+    fun setSearching(value: Boolean) {
+        searching = value
+        onSearchingChange(value)
+    }
+
+    fun select(found: ImportAccountCandidate) {
+        selected = found.family to found.index
+        onSelect(found.family, found.index)
         shownAddress = found.address
         balanceSompi = found.balanceSompi
+        shownHasHistory = found.hasHistory
     }
 
     // A search that is left (Back, the explainer) holds nothing up.
@@ -1589,49 +1789,60 @@ internal fun PassphraseAddressPreview(
     LaunchedEffect(passphrase, searchAttempt) {
         balanceSompi = null
         balanceFailed = false
+        shownHasHistory = false
         searchIncomplete = false
         foundAddresses = emptyList()
-        selectedIndex = 0
-        onSelectIndex(0)
+        everyWalletType = emptyList()
+        showsEveryWalletType = false
+        selected = WalletSourceFamily.KASPA_STANDARD to 0
+        onSelect(WalletSourceFamily.KASPA_STANDARD, 0)
         // Held from the first keystroke, not only once the lookup starts: an Import tapped in
         // the pause would otherwise go to #0 (iOS 0799cec).
-        onSearchingChange(findAddresses != null)
+        setSearching(findAddresses != null)
         kotlinx.coroutines.delay(250)
         val address = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { previewAddress(passphrase) }
         shownAddress = address
         if (address == null) {
             balanceFailed = true
-            onSearchingChange(false)
+            setSearching(false)
             return@LaunchedEffect
         }
         // a further pause, so only the passphrase someone stopped typing is looked up
         kotlinx.coroutines.delay(450)
         if (findAddresses != null) {
+            everyWalletType = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { addressesAtZero(passphrase) }
             // A slow or unreachable node lets Import go after 12 s, onto #0, and says so; an
             // answer that comes later is ignored (iOS 1652437 `searchTimeoutNanoseconds`). A timer
             // beside the search rather than withTimeoutOrNull, which would still wait for a node
-            // call that doesn't stop when cancelled.
+            // call that doesn't stop when cancelled. The timer also cancels the search, which
+            // stops its history look-ups (iOS 018e634).
             var timedOut = false
+            val search = async { runCatching { findAddresses(passphrase) }.getOrNull() }
             val timeout = launch {
                 kotlinx.coroutines.delay(PASSPHRASE_SEARCH_TIMEOUT_MS)
                 timedOut = true
                 searchIncomplete = true
                 balanceFailed = true
-                onSearchingChange(false)
+                setSearching(false)
+                search.cancel()
             }
-            val found = findAddresses(passphrase)
+            val found = try {
+                search.await()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                null
+            }
             timeout.cancel()
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             if (timedOut) return@LaunchedEffect
-            onSearchingChange(false)
-            val first = found?.firstOrNull { it.balanceSompi > 0 } ?: found?.firstOrNull()
-            if (found == null || first == null) {
+            setSearching(false)
+            if (found == null) {
                 searchIncomplete = true
                 balanceFailed = true
                 return@LaunchedEffect
             }
             foundAddresses = found
-            select(first)
+            val first = found.firstOrNull()
+            if (first != null) select(first) else balanceSompi = 0L
             return@LaunchedEffect
         }
         val sompi = previewBalance(address)
@@ -1683,35 +1894,40 @@ internal fun PassphraseAddressPreview(
         val checkedSompi = balanceSompi
         if (showsFundsHint && checkedSompi != null) {
             Spacer(Modifier.height(4.dp))
-            Text(
-                if (checkedSompi > 0) tr(R.string.kp_this_address_holds_funds_so_this_77e6c)
-                else tr(R.string.kp_no_funds_on_this_address_if_29703),
-                color = if (checkedSompi > 0) colors.success else colors.warning,
-                fontSize = 12.sp,
-            )
+            when {
+                checkedSompi > 0 -> Text(tr(R.string.kp_this_address_holds_funds_so_this_77e6c), color = colors.success, fontSize = 12.sp)
+                shownHasHistory -> Text(tr(R.string.kp_this_address_has_history_so_this_401c3), color = colors.success, fontSize = 12.sp)
+                passphrase.isEmpty() -> Text(tr(R.string.kp_no_funds_or_history_on_this_20035), color = colors.textSecondary, fontSize = 12.sp)
+                else -> Text(tr(R.string.kp_no_funds_on_this_address_if_29703), color = colors.warning, fontSize = 12.sp)
+            }
         }
-        if (foundAddresses.size > 1) {
+        if (foundAddresses.size > 1 || showsEveryWalletType) {
+            val visibleRows = if (!showsEveryWalletType) foundAddresses else {
+                val foundIds = foundAddresses.map { it.family to it.index }.toSet()
+                foundAddresses + everyWalletType.filter { (it.family to it.index) !in foundIds }
+            }
             Spacer(Modifier.height(14.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    tr(R.string.kp_we_picked_the_first_address_with_43d0f),
+                    tr(R.string.kp_we_picked_the_most_likely_account_7fd1f),
                     color = colors.textSecondary,
                     fontSize = 12.sp,
                 )
-                foundAddresses.forEach { found ->
+                visibleRows.forEach { found ->
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable(enabled = enabled) { select(found) },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(
-                            if (selectedIndex == found.index) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                            if (selected == (found.family to found.index)) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                             contentDescription = null,
                             tint = KaspaTeal,
                             modifier = Modifier.size(20.dp),
                         )
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(tr(R.string.kp_address_lld_64ab3, found.index), color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(found.family.displayName, color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(tr(R.string.kp_address_lld_64ab3, found.index), color = colors.textSecondary, fontSize = 11.sp)
                             Text(
                                 "${found.address.take(14)}...${found.address.takeLast(6)}",
                                 color = colors.textSecondary,
@@ -1719,15 +1935,29 @@ internal fun PassphraseAddressPreview(
                                 fontSize = 11.sp,
                             )
                         }
-                        Text(
-                            "${com.kachat.app.util.KaspaUnit.plain(found.balanceSompi)} ${com.kachat.app.util.KaspaUnit.symbol}",
-                            color = if (found.balanceSompi > 0) colors.success else colors.textSecondary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
+                        if (found.balanceSompi > 0) {
+                            Text(
+                                "${com.kachat.app.util.KaspaUnit.plain(found.balanceSompi)} ${com.kachat.app.util.KaspaUnit.symbol}",
+                                color = colors.success,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        } else if (found.hasHistory) {
+                            Text(tr(R.string.kp_has_history_d008a), color = colors.textSecondary, fontSize = 12.sp)
+                        }
                     }
                 }
             }
+        }
+        if (findAddresses != null && !searching && everyWalletType.isNotEmpty() && !showsEveryWalletType) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                tr(R.string.kp_see_every_wallet_type_92dd4),
+                color = KaspaTeal,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable(enabled = enabled) { showsEveryWalletType = true },
+            )
         }
         if (searchIncomplete) {
             Spacer(Modifier.height(10.dp))
@@ -1869,151 +2099,6 @@ private fun PassphraseInputField(
             disabledIndicatorColor = Color.Transparent
         )
     )
-}
-
-/**
- * KasWare-style "which wallet is this seed from?" chooser, shown FIRST when the user taps Import
- * Existing Account (before seed entry, which then continues exactly as before). Ported from iOS's
- * `ImportSourceWalletView`. The selection maps a wallet name to its identity derivation-path
- * family ([WalletSourceFamily], rules replicated from KasWare's RESTORE_WALLETS/ADDRESS_TYPES +
- * hd-keyring derivation), so KaChat derives the chatting identity where that wallet actually kept
- * the user's funds and KNS domains. KaChat is preselected at the top; KaChat's own spending chain
- * always stays on the m/44'/111111'/1' branch regardless of this choice (see WalletManager's
- * decision comment).
- */
-@Composable
-fun ImportSourceWalletScreen(onBack: () -> Unit, onContinue: (WalletSourceFamily) -> Unit, onRestoreFromNfcCard: () -> Unit = {}) {
-    val options = remember { SourceWalletOption.ALL }
-    var selectedName by remember { mutableStateOf(options.first().displayName) }
-    val selectedFamily = options.firstOrNull { it.displayName == selectedName }?.family
-        ?: WalletSourceFamily.KASPA_STANDARD
-
-    Surface(color = LocalAppColors.current.background, modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 16.dp)
-        ) {
-            // iOS 26: the back chevron on a glass disc.
-            SheetBarIconButton(Icons.Filled.ArrowBackIosNew, stringResource(R.string.back), onClick = onBack, tint = LocalAppColors.current.textPrimary)
-
-            Spacer(Modifier.height(16.dp))
-            Icon(
-                Icons.Default.AccountBalanceWallet,
-                contentDescription = null,
-                tint = KaspaTeal,
-                modifier = Modifier
-                    .size(48.dp)
-                    .align(Alignment.CenterHorizontally)
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                stringResource(R.string.where_is_this_seed_phrase_from),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = LocalAppColors.current.textPrimary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                stringResource(R.string.different_wallets_store_your_kaspa),
-                color = LocalAppColors.current.textSecondary,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(16.dp))
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                options.forEach { option ->
-                    val isSelected = option.displayName == selectedName
-                    Surface(
-                        color = LocalAppColors.current.surface,
-                        shape = RoundedCornerShape(12.dp),
-                        border = if (isSelected) BorderStroke(1.5.dp, KaspaTeal) else null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedName = option.displayName }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                contentDescription = null,
-                                tint = if (isSelected) KaspaTeal else LocalAppColors.current.textSecondary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        option.displayName,
-                                        color = LocalAppColors.current.textPrimary,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    if (option.isDefault) {
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            stringResource(R.string.default_label),
-                                            color = KaspaTeal,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    option.family.pathDescription,
-                                    color = LocalAppColors.current.textSecondary,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = { onContinue(selectedFamily) },
-                // iOS: arrow.right.circle.fill and Continue, .headline, white on the accent.
-                colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) {
-                Icon(Icons.Default.ArrowCircleRight, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.continue_label), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
-            }
-            // Beta only (iOS 4f5dfd2).
-            if (com.kachat.app.services.NfcCard.isAvailable(LocalContext.current)) {
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable(onClick = onRestoreFromNfcCard)
-                        .padding(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(Icons.Default.Contactless, contentDescription = null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
-                    Text(tr(R.string.kp_restore_from_nfc_card_85639), color = KaspaTeal, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-    }
 }
 
 /**

@@ -243,6 +243,7 @@ data class NfcCardBackupPayload(
         fun familyName(family: WalletSourceFamily): String = when (family) {
             WalletSourceFamily.KASPA_STANDARD -> "kaspaStandard"
             WalletSourceFamily.KASPA_LEGACY_972 -> "kaspaLegacy972"
+            WalletSourceFamily.CHAINGE -> "chainge"
             WalletSourceFamily.ONE_KEY -> "oneKey"
         }
 

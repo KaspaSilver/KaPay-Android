@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">स्वचालित स्कैन सबसे अच्छे उपलब्ध नोड खोजकर उनसे जुड़ता है। कोई विशेष नोड चुनने पर केवल उसी से जुड़ता है, दूसरों पर नहीं जाता। अन्य टैब के इंडेक्सर, डोमेन या एक्सप्लोरर पर असर नहीं पड़ता। यहाँ चुनने के लिए नीचे IP पता पुस्तिका में अपने पते जोड़ें।</string>
     <string name="ab_picker_empty_body">वॉलेट > संपर्क में संपर्क जोड़ें।</string>
     <string name="ab_no_contacts">अभी कोई संपर्क नहीं</string>
-    <string name="where_is_this_seed_phrase_from">आपके 12 या 24 शब्द कहाँ से हैं?</string>
-    <string name="different_wallets_store_your_kaspa">अलग-अलग वॉलेट आपका Kaspa अलग-अलग पता पाथ पर रखते हैं। चुनें कि ये शब्द कहाँ से आए हैं, ताकि KaPay आपके फंड और डोमेन ढूंढ सके।</string>
     <string name="import_words_enter_recovery_phrase">अपने 12 या 24 शब्द दर्ज करें</string>
 </resources>

@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">يعثر الفحص التلقائي على أفضل العقد المتاحة ويتصل بها. اختيار عقدة محددة يتصل بها وحدها دون الرجوع إلى غيرها. لا يؤثر على المفهرسات أو النطاقات أو المستكشف في التبويبات الأخرى. أضف عناوينك إلى دفتر عناوين IP أدناه لاختيارها هنا.</string>
     <string name="ab_picker_empty_body">أضف جهات الاتصال من المحفظة > جهات الاتصال.</string>
     <string name="ab_no_contacts">لا توجد جهات اتصال بعد</string>
-    <string name="where_is_this_seed_phrase_from">من أين جاءت كلماتك الـ 12 أو 24؟</string>
-    <string name="different_wallets_store_your_kaspa">تخزّن المحافظ المختلفة Kaspa الخاص بك على مسارات عناوين مختلفة. اختر المحفظة التي جاءت منها هذه الكلمات ليجد KaPay أموالك ونطاقاتك.</string>
     <string name="import_words_enter_recovery_phrase">أدخل كلماتك الـ 12 أو 24</string>
 </resources>

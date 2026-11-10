@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">Автопоиск находит лучшие доступные узлы и подключается к ним. Выбор конкретного узла подключает только к нему, без перехода на другие. Не влияет на индексаторы, домены и обозреватель на других вкладках. Добавьте свои адреса в адресную книгу IP ниже, чтобы выбрать их здесь.</string>
     <string name="ab_picker_empty_body">Добавляйте контакты в разделе Кошелёк > Контакты.</string>
     <string name="ab_no_contacts">Пока нет контактов</string>
-    <string name="where_is_this_seed_phrase_from">Откуда ваши 12 или 24 слова?</string>
-    <string name="different_wallets_store_your_kaspa">Разные кошельки хранят ваши Kaspa по разным путям адресов. Выберите, откуда эти слова, чтобы KaPay нашёл ваши средства и домены.</string>
     <string name="import_words_enter_recovery_phrase">Введите ваши 12 или 24 слова</string>
 </resources>

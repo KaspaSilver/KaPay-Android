@@ -254,7 +254,6 @@
     <string name="select_the_currency_youd_like_prices">Pilih mata uang yang ingin ditampilkan.</string>
     <string name="i_have_written_down_my_seed_phrase">Saya telah mencatat frasa pemulihan saya dan menyimpannya dengan aman</string>
     <string name="i_already_have_a_domain_somewhere">Saya sudah memiliki domain di tempat lain</string>
-    <string name="default_label">Default</string>
     <string name="continue_label">Lanjutkan</string>
     <string name="user_info">Info Pengguna</string>
     <!-- Message actions: translation, share, read state (iOS 3eee9e4) -->
@@ -1255,7 +1254,5 @@
     <string name="ab_picker_empty_body">Tambahkan kontak di Dompet > Kontak.</string>
     <string name="ab_no_contacts">Belum ada kontak</string>
     <string name="anyone_with_your_seed_phrase_can">Siapa pun yang memiliki 12 atau 24 kata Anda dapat mengakses akun Anda. Jangan pernah membagikannya kepada siapa pun.</string>
-    <string name="where_is_this_seed_phrase_from">Dari mana 12 atau 24 kata Anda berasal?</string>
-    <string name="different_wallets_store_your_kaspa">Setiap dompet menyimpan Kaspa Anda di jalur alamat yang berbeda. Pilih asal kata-kata ini agar KaPay dapat menemukan dana dan domain Anda.</string>
     <string name="import_words_enter_recovery_phrase">Masukkan 12 atau 24 kata Anda</string>
 </resources>

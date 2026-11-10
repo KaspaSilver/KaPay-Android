@@ -123,6 +123,7 @@
     <string name="kp_get_ready_70c1b">Bersiaplah</string>
     <string name="kp_give_this_account_a_name_so_18d55">Beri nama akun ini agar Anda dapat mengenalinya.</string>
     <string name="kp_give_this_address_a_label_to_32e1b">Beri label alamat ini untuk membantu Anda mengenalinya.</string>
+    <string name="kp_has_history_d008a">Ada riwayat</string>
     <string name="kp_hide_34d8b">Sembunyikan</string>
     <string name="kp_how_much_fa22a">Berapa?</string>
     <string name="kp_i_have_a_pen_and_paper_690e2">Saya punya pena dan kertas</string>
@@ -142,6 +143,7 @@
     <string name="kp_it_was_read_back_from_the_40719">Cadangan dibaca kembali dari kartu dan sudah diperiksa. Untuk memulihkannya, pilih Impor Akun yang Ada, lalu Pulihkan dari Kartu NFC, dan masukkan PIN serta frasa sandi Anda. Frasa sandi Anda tidak ada di kartu, jadi simpan frasa sandi dan 12 atau 24 kata yang Anda tulis dengan aman.</string>
     <string name="kp_kachat_domains_df144">Domain .kachat</string>
     <string name="kp_kachat_indexer_url_da526">URL Pengindeks .kachat</string>
+    <string name="kp_kapay_checks_your_words_against_every_5bb67">KaPay memeriksa kata-kata Anda pada setiap jenis dompet Kaspa, jadi Anda tidak perlu tahu asalnya dari dompet mana.</string>
     <string name="kp_kas_b358b">KAS</string>
     <string name="kp_kas_price_bb9bb">Harga KAS</string>
     <string name="kp_kaspa_network_fceee">Jaringan Kaspa</string>
@@ -172,6 +174,7 @@
     <string name="kp_no_addresses_discovered_yet_15738">Belum ada alamat yang ditemukan.</string>
     <string name="kp_no_addresses_with_a_balance_or_3a874">Belum ada alamat dengan saldo atau domain</string>
     <string name="kp_no_funds_on_this_address_if_29703">Tidak ada dana di alamat ini. Jika Anda mengharapkan dana di sini, periksa frasa sandi Anda.</string>
+    <string name="kp_no_funds_or_history_on_this_20035">Tidak ada dana atau riwayat di alamat ini.</string>
     <string name="kp_no_photos_screenshots_cloud_storage_notes_c2ec4">Jangan di foto, tangkapan layar, penyimpanan cloud, aplikasi catatan, email, atau obrolan.</string>
     <string name="kp_no_spending_addresses_4440e">Tidak Ada Alamat Pengeluaran</string>
     <string name="kp_no_subfolders_fd56f">Tidak ada subfolder.</string>
@@ -236,6 +239,7 @@
     <string name="kp_saves_this_account_s_12_or_a4fe2">Menyimpan 12 atau 24 kata akun ini di kartu Anda, dilindungi PIN 6 digit.</string>
     <string name="kp_scan_card_75864">Pindai Kartu</string>
     <string name="kp_search_again_ddef8">Cari Lagi</string>
+    <string name="kp_see_every_wallet_type_92dd4">Lihat Semua Jenis Dompet</string>
     <string name="kp_see_my_words_again_5c21f">Lihat Kata-kata Saya Lagi</string>
     <string name="kp_select_85982">Pilih</string>
     <string name="kp_sell_fa3cf">Jual</string>
@@ -252,6 +256,7 @@
     <string name="kp_some_of_those_words_don_t_96de4">Beberapa kata tidak cocok. Periksa kertas Anda dan coba lagi.</string>
     <string name="kp_some_transactions_could_not_be_loaded_c11c5">Beberapa transaksi tidak dapat dimuat. Tarik untuk menyegarkan dan coba lagi.</string>
     <string name="kp_spending_45614">Pengeluaran</string>
+    <string name="kp_standard_kaspa_wallet_0671b">Dompet Kaspa Standar</string>
     <string name="kp_start_backup_cf379">Mulai Cadangan</string>
     <string name="kp_store_it_away_from_your_12_6edea">Simpan terpisah dari 12 atau 24 kata Anda. Anda membutuhkan keduanya, dan kehilangan salah satunya berarti kehilangan akun.</string>
     <string name="kp_store_it_somewhere_safe_and_private_8204a">Simpan di tempat yang aman dan pribadi, jauh dari api dan air.</string>
@@ -280,6 +285,7 @@
     <string name="kp_this_address_0a1a1">Alamat ini</string>
     <string name="kp_this_address_consolidating_d0ba3">Alamat ini (menggabungkan)</string>
     <string name="kp_this_address_does_not_carry_a_981c0">Alamat ini tidak memiliki kunci publik.</string>
+    <string name="kp_this_address_has_history_so_this_401c3">Alamat ini punya riwayat, jadi sepertinya ini akun yang benar.</string>
     <string name="kp_this_address_holds_funds_so_this_77e6c">Alamat ini menyimpan dana, jadi ini tampaknya akun yang tepat.</string>
     <string name="kp_this_can_t_be_undone_fe63a">Tindakan ini tidak dapat dibatalkan.</string>
     <string name="kp_this_card_already_holds_a_backup_978f8">Kartu ini sudah berisi cadangan. Menyimpan akan menggantinya setelah yang baru dikonfirmasi.</string>
@@ -311,7 +317,7 @@
     <string name="kp_waiting_for_a_price_c88b2">Menunggu harga...</string>
     <string name="kp_watch_only_this_cannot_spend_but_95314">Hanya pantau. Ini tidak dapat membelanjakan, tetapi menampilkan setiap alamat di akun ini.</string>
     <string name="kp_we_ll_check_again_in_6_cdcf2">Kami akan memeriksa lagi dalam 6 bulan.</string>
-    <string name="kp_we_picked_the_first_address_with_43d0f">Kami memilih alamat pertama yang berisi dana. Ketuk yang lain jika itu bukan alamat yang Anda gunakan.</string>
+    <string name="kp_we_picked_the_most_likely_account_7fd1f">Kami memilih akun yang paling mungkin. Ketuk yang lain jika bukan ini yang Anda gunakan.</string>
     <string name="kp_website_2e8a5">Situs Web</string>
     <string name="kp_what_is_a_passphrase_7619f">Apa itu frasa sandi?</string>
     <string name="kp_what_s_cached_e73da">Yang Di-cache</string>
@@ -335,6 +341,7 @@
     <string name="kp_your_12_or_24_words_alone_047c3">12 atau 24 kata Anda saja tidak akan memulihkan akun ini. Masukkan frasa sandi sesuai yang Anda tulis, persis, termasuk huruf kapital dan spasi.</string>
     <string name="kp_your_12_or_24_words_are_b8157">12 atau 24 kata Anda adalah akun Anda</string>
     <string name="kp_your_12_or_24_words_stay_d1f9a">12 atau 24 kata Anda tetap tersedia di Pengaturan &gt; Cadangkan Akun.</string>
+    <string name="kp_your_account_d7913">Akun Anda</string>
     <string name="kp_your_backup_is_good_b254a">Cadangan Anda sudah benar</string>
     <string name="kp_your_card_needs_the_kachat_nfc_f6761">Kartu Anda perlu perangkat lunak KaChat-NFC terlebih dahulu. Muat dari halaman Kartu NFC di Kaspa Quick Start.</string>
     <string name="kp_your_chatting_address_f76c6">Alamat obrolan Anda</string>

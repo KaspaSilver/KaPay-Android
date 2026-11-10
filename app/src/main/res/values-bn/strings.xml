@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">স্বয়ংক্রিয় স্ক্যান সেরা উপলব্ধ নোড খুঁজে সংযোগ করে। নির্দিষ্ট নোড বাছলে শুধু সেটিতেই সংযোগ করে, অন্যটিতে যায় না। অন্য ট্যাবের ইনডেক্সার, ডোমেইন বা এক্সপ্লোরারে প্রভাব ফেলে না। এখানে বাছতে নিচের IP ঠিকানা বইয়ে আপনার ঠিকানা যোগ করুন।</string>
     <string name="ab_picker_empty_body">ওয়ালেট > কন্টাক্ট থেকে কন্টাক্ট যোগ করুন।</string>
     <string name="ab_no_contacts">এখনো কোনো কন্টাক্ট নেই</string>
-    <string name="where_is_this_seed_phrase_from">আপনার ১২ বা ২৪টি শব্দ কোথা থেকে এসেছে?</string>
-    <string name="different_wallets_store_your_kaspa">বিভিন্ন ওয়ালেট আপনার Kaspa আলাদা আলাদা ঠিকানা পাথে রাখে। এই শব্দগুলো কোথা থেকে এসেছে তা বেছে নিন, যাতে KaPay আপনার ফান্ড ও ডোমেইন খুঁজে পায়।</string>
     <string name="import_words_enter_recovery_phrase">আপনার ১২ বা ২৪টি শব্দ লিখুন</string>
 </resources>

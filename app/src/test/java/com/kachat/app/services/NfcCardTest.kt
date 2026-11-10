@@ -57,7 +57,9 @@ class NfcCardTest {
         assertEquals("kaspaStandard", NfcCardBackupPayload.familyName(WalletSourceFamily.KASPA_STANDARD))
         assertEquals("kaspaLegacy972", NfcCardBackupPayload.familyName(WalletSourceFamily.KASPA_LEGACY_972))
         assertEquals("oneKey", NfcCardBackupPayload.familyName(WalletSourceFamily.ONE_KEY))
-        assertNull(NfcCardBackupPayload.familyFromCard("chainge"))
+        assertEquals("chainge", NfcCardBackupPayload.familyName(WalletSourceFamily.CHAINGE))
+        assertEquals(WalletSourceFamily.CHAINGE, NfcCardBackupPayload.familyFromCard("chainge"))
+        assertNull(NfcCardBackupPayload.familyFromCard("notAFamily"))
     }
 
     @Test

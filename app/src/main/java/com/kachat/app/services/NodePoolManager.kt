@@ -812,8 +812,8 @@ class NodePoolManager @Inject constructor(
     }
 
     /** What each of [addresses] holds as the node sees it (an address with nothing is left out), or
-     *  null when the node cannot answer. For an import's passphrase step (iOS 4f5dfd2
-     *  `findChattingAddresses`), where there's no account yet. */
+     *  null when the node cannot answer. For import's auto-detect (iOS 018e634
+     *  `findImportAccounts`), where there's no account yet. */
     suspend fun getBalancesByAddresses(addresses: List<String>): Map<String, Long>? {
         return try {
             val out = HashMap<String, Long>()

@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">Quét tự động tìm và kết nối với các node tốt nhất. Chọn một node cụ thể chỉ kết nối với node đó, không chuyển sang node khác. Không ảnh hưởng đến trình lập chỉ mục, tên miền hay trình khám phá ở các tab khác. Thêm địa chỉ của bạn vào Sổ địa chỉ IP bên dưới để chọn ở đây.</string>
     <string name="ab_picker_empty_body">Thêm liên hệ trong Ví > Danh bạ.</string>
     <string name="ab_no_contacts">Chưa có liên hệ nào</string>
-    <string name="where_is_this_seed_phrase_from">12 hoặc 24 từ của bạn đến từ đâu?</string>
-    <string name="different_wallets_store_your_kaspa">Mỗi ví lưu Kaspa của bạn ở một đường dẫn địa chỉ khác nhau. Hãy chọn nơi các từ này đến từ để KaPay tìm thấy tiền và tên miền của bạn.</string>
     <string name="import_words_enter_recovery_phrase">Nhập 12 hoặc 24 từ của bạn</string>
 </resources>

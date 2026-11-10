@@ -1001,11 +1001,17 @@ class WalletManager @Inject constructor(
                 val account = HDKeyDerivation.deriveChildKey(coinType, ChildNumber(0, true))
                 HDKeyDerivation.deriveChildKey(account, ChildNumber(0, true))
             }
+            // m/44'/111111'/0' - the single 0' leaf is applied as the "index 0" step in
+            // [identityPrivateKeyBytes].
+            WalletSourceFamily.CHAINGE -> {
+                val coinType = HDKeyDerivation.deriveChildKey(purpose, ChildNumber(111111, true))
+                HDKeyDerivation.deriveChildKey(coinType, ChildNumber(0, true))
+            }
         }
     }
 
-    /** Applies the family's index rule to [baseNode]. Null when the key is unusable (only
-     *  reachable via a failed OneKey tweak). */
+    /** Applies the family's index rule to [baseNode]. Null for an index the family doesn't have
+     *  (Chainge has exactly one address) or when the key is unusable (a failed OneKey tweak). */
     private fun identityPrivateKeyBytes(
         baseNode: DeterministicKey,
         index: Int,
@@ -1015,6 +1021,8 @@ class WalletManager @Inject constructor(
             HDKeyDerivation.deriveChildKey(baseNode, ChildNumber(index, false)).privKeyBytes
         WalletSourceFamily.KASPA_LEGACY_972 ->
             HDKeyDerivation.deriveChildKey(baseNode, ChildNumber(index, true)).privKeyBytes
+        WalletSourceFamily.CHAINGE ->
+            if (index == 0) HDKeyDerivation.deriveChildKey(baseNode, ChildNumber(0, true)).privKeyBytes else null
         WalletSourceFamily.ONE_KEY ->
             oneKeyTweakedPrivateKey(HDKeyDerivation.deriveChildKey(baseNode, ChildNumber(index, false)).privKeyBytes)
     }
@@ -1095,9 +1103,10 @@ class WalletManager @Inject constructor(
         null
     }
 
-    /** The identity-chain addresses at [indices] of a seed with no account yet, for an import's
-     *  passphrase step (iOS 4f5dfd2 `findChattingAddresses`). One base node, so 50 cost about what
-     *  one does. Empty when the words aren't usable. */
+    /** The identity-chain addresses at [indices] of a seed with no account yet, for import's
+     *  auto-detect (iOS 018e634 `chattingAddresses`). One base node, so 50 cost about what one
+     *  does. Single-address families (Chainge) only ever yield index 0. Empty when the words
+     *  aren't usable. */
     fun previewIdentityAddresses(
         mnemonic: List<String>,
         passphrase: String,
@@ -1109,9 +1118,11 @@ class WalletManager @Inject constructor(
         } catch (e: Exception) {
             return emptyList()
         }
-        return indices.mapNotNull { index ->
-            identityPrivateKeyBytes(baseNode, index, family)?.let { index to addressFromPrivateKeyBytes(it) }
-        }
+        return indices
+            .filter { index -> index >= 0 && (family.supportsIndexScan || index == 0) }
+            .mapNotNull { index ->
+                identityPrivateKeyBytes(baseNode, index, family)?.let { index to addressFromPrivateKeyBytes(it) }
+            }
     }
 
     private fun deriveIdentityAddress(

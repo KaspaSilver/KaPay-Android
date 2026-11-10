@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">La búsqueda automática encuentra y se conecta a los mejores nodos disponibles. Elegir un nodo concreto conecta solo a él, sin recurrir a otros. No afecta a los indexadores, dominios ni al explorador de las otras pestañas. Añade direcciones propias a la Libreta de IPs de abajo para elegirlas aquí.</string>
     <string name="ab_picker_empty_body">Añade contactos en Billetera > Contactos.</string>
     <string name="ab_no_contacts">Aún no hay contactos</string>
-    <string name="where_is_this_seed_phrase_from">¿De dónde vienen tus 12 o 24 palabras?</string>
-    <string name="different_wallets_store_your_kaspa">Cada cartera guarda tu Kaspa en rutas de dirección distintas. Elige de dónde vienen estas palabras para que KaPay encuentre tus fondos y tus dominios.</string>
     <string name="import_words_enter_recovery_phrase">Introduce tus 12 o 24 palabras</string>
 </resources>

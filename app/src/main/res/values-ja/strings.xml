@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">自動スキャンは利用可能な最適なノードを見つけて接続します。特定のノードを選ぶとそのノードのみに接続し、他には切り替えません。他のタブのインデクサ、ドメイン、エクスプローラには影響しません。ここで選ぶには、下の IP アドレス帳に独自のアドレスを追加してください。</string>
     <string name="ab_picker_empty_body">ウォレット > 連絡先 で連絡先を追加できます。</string>
     <string name="ab_no_contacts">連絡先はまだありません</string>
-    <string name="where_is_this_seed_phrase_from">12語または24語はどこのものですか？</string>
-    <string name="different_wallets_store_your_kaspa">ウォレットによって、Kaspaを保管するアドレスのパスが異なります。KaPayが資金とドメインを見つけられるよう、これらの単語がどこのものかを選んでください。</string>
     <string name="import_words_enter_recovery_phrase">12語または24語を入力</string>
 </resources>

@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">Otomatik Tarama en iyi düğümleri bulur ve bağlanır. Belirli bir düğüm seçmek yalnızca ona bağlanır, başkalarına geçmez. Diğer sekmelerdeki dizinleyicileri, alan adlarını veya gezgini etkilemez. Burada seçmek için kendi adreslerini aşağıdaki IP Adres Defteri\'ne ekle.</string>
     <string name="ab_picker_empty_body">Kişileri Cüzdan > Kişiler bölümünden ekle.</string>
     <string name="ab_no_contacts">Henüz kişi yok</string>
-    <string name="where_is_this_seed_phrase_from">12 veya 24 kelimen nereden?</string>
-    <string name="different_wallets_store_your_kaspa">Farklı cüzdanlar Kaspa\'nı farklı adres yollarında saklar. KaPay\'in fonlarını ve alan adlarını bulabilmesi için bu kelimelerin nereden geldiğini seç.</string>
     <string name="import_words_enter_recovery_phrase">12 veya 24 kelimeni gir</string>
 </resources>

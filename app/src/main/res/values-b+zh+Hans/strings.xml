@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">自动扫描会找到并连接最佳可用节点。选择特定节点只会连接该节点，不会切换到其他节点。不影响其他标签页中的索引器、域名或浏览器。将你的地址添加到下方的 IP 地址簿后即可在此选择。</string>
     <string name="ab_picker_empty_body">在 钱包 > 联系人 中添加联系人。</string>
     <string name="ab_no_contacts">还没有联系人</string>
-    <string name="where_is_this_seed_phrase_from">你的 12 或 24 个单词来自哪里？</string>
-    <string name="different_wallets_store_your_kaspa">不同的钱包把你的 Kaspa 存在不同的地址路径上。请选择这些单词来自哪里，这样 KaPay 才能找到你的资金和域名。</string>
     <string name="import_words_enter_recovery_phrase">输入你的 12 或 24 个单词</string>
 </resources>

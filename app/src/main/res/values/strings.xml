@@ -499,9 +499,6 @@
     <string name="transfer_your_domain_to_this_address">Transfer your domain to this address so your identity is connected to KaChat.</string>
 
     <!-- Import source-wallet chooser -->
-    <string name="where_is_this_seed_phrase_from">Where are your 12 or 24 words from?</string>
-    <string name="different_wallets_store_your_kaspa">Different wallets store your Kaspa on different address paths. Pick where these words come from so KaPay finds your funds and domains.</string>
-    <string name="default_label">Default</string>
     <string name="continue_label">Continue</string>
 
     <!-- Chatting-address picker (import runs only) -->

@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">A busca automática encontra os melhores nós disponíveis e se conecta a eles. Escolher um nó específico conecta só a ele, sem recorrer a outros. Não afeta os indexadores, domínios ou o explorador das outras abas. Adicione seus endereços ao Catálogo de IPs abaixo para escolhê-los aqui.</string>
     <string name="ab_picker_empty_body">Adicione contatos em Carteira > Contatos.</string>
     <string name="ab_no_contacts">Ainda não há contatos</string>
-    <string name="where_is_this_seed_phrase_from">De onde vêm suas 12 ou 24 palavras?</string>
-    <string name="different_wallets_store_your_kaspa">Carteiras diferentes guardam seus Kaspa em caminhos de endereço diferentes. Escolha de onde vêm estas palavras para o KaPay encontrar seus fundos e domínios.</string>
     <string name="import_words_enter_recovery_phrase">Digite suas 12 ou 24 palavras</string>
 </resources>

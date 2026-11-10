@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">סריקה אוטומטית מוצאת את הצמתים הטובים ביותר ומתחברת אליהם. בחירת צומת מסוים מתחברת רק אליו, בלי מעבר לאחרים. לא משפיע על האינדקסרים, הדומיינים או הסייר בלשוניות האחרות. הוסיפו כתובות משלכם לפנקס כתובות ה-IP למטה כדי לבחור אותן כאן.</string>
     <string name="ab_picker_empty_body">אפשר להוסיף אנשי קשר בארנק > אנשי קשר.</string>
     <string name="ab_no_contacts">עדיין אין אנשי קשר</string>
-    <string name="where_is_this_seed_phrase_from">מאיפה 12 או 24 המילים שלכם?</string>
-    <string name="different_wallets_store_your_kaspa">ארנקים שונים שומרים את ה-Kaspa שלכם בנתיבי כתובות שונים. בחרו מאיפה המילים האלה מגיעות כדי ש-KaPay ימצא את הכספים והדומיינים שלכם.</string>
     <string name="import_words_enter_recovery_phrase">הזינו את 12 או 24 המילים שלכם</string>
 </resources>

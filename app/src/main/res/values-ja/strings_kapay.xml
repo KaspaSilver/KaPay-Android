@@ -123,6 +123,7 @@
     <string name="kp_get_ready_70c1b">準備しましょう</string>
     <string name="kp_give_this_account_a_name_so_18d55">このアカウントを識別できるように名前を付けてください。</string>
     <string name="kp_give_this_address_a_label_to_32e1b">識別しやすいようにこのアドレスにラベルを付けてください。</string>
+    <string name="kp_has_history_d008a">履歴あり</string>
     <string name="kp_hide_34d8b">非表示にする</string>
     <string name="kp_how_much_fa22a">いくら？</string>
     <string name="kp_i_have_a_pen_and_paper_690e2">ペンと紙があります</string>
@@ -142,6 +143,7 @@
     <string name="kp_it_was_read_back_from_the_40719">カードから読み戻して確認しました。復元するには、「既存のアカウントをインポート」から「NFCカードから復元」を選び、PINとパスフレーズを入力してください。パスフレーズはカードに保存されていないため、書き留めた12語または24語とあわせて安全に保管してください。</string>
     <string name="kp_kachat_domains_df144">.kachat ドメイン</string>
     <string name="kp_kachat_indexer_url_da526">.kachat Indexer URL</string>
+    <string name="kp_kapay_checks_your_words_against_every_5bb67">KaPayがあらゆる種類のKaspaウォレットと照合するため、どのウォレットの単語かを知らなくても大丈夫です。</string>
     <string name="kp_kas_b358b">KAS</string>
     <string name="kp_kas_price_bb9bb">KAS価格</string>
     <string name="kp_kaspa_network_fceee">Kaspaネットワーク</string>
@@ -172,6 +174,7 @@
     <string name="kp_no_addresses_discovered_yet_15738">まだアドレスが検出されていません。</string>
     <string name="kp_no_addresses_with_a_balance_or_3a874">残高またはドメインのあるアドレスはまだありません</string>
     <string name="kp_no_funds_on_this_address_if_29703">このアドレスに資金はありません。ここにあるはずの場合は、パスフレーズを確認してください。</string>
+    <string name="kp_no_funds_or_history_on_this_20035">このアドレスには資金も履歴もありません。</string>
     <string name="kp_no_photos_screenshots_cloud_storage_notes_c2ec4">写真、スクリーンショット、クラウドストレージ、メモアプリ、メール、チャットには保存しないでください。</string>
     <string name="kp_no_spending_addresses_4440e">使用アドレスがありません</string>
     <string name="kp_no_subfolders_fd56f">サブフォルダはありません。</string>
@@ -236,6 +239,7 @@
     <string name="kp_saves_this_account_s_12_or_a4fe2">このアカウントの12語または24語を、6桁のPINで保護してカードに保存します。</string>
     <string name="kp_scan_card_75864">カードをスキャン</string>
     <string name="kp_search_again_ddef8">もう一度検索</string>
+    <string name="kp_see_every_wallet_type_92dd4">すべてのウォレットの種類を表示</string>
     <string name="kp_see_my_words_again_5c21f">単語をもう一度見る</string>
     <string name="kp_select_85982">選択</string>
     <string name="kp_sell_fa3cf">売却</string>
@@ -252,6 +256,7 @@
     <string name="kp_some_of_those_words_don_t_96de4">一致しない単語があります。紙を見て確認し、もう一度お試しください。</string>
     <string name="kp_some_transactions_could_not_be_loaded_c11c5">一部のトランザクションを読み込めませんでした。下に引いて更新し、もう一度お試しください。</string>
     <string name="kp_spending_45614">支出</string>
+    <string name="kp_standard_kaspa_wallet_0671b">標準のKaspaウォレット</string>
     <string name="kp_start_backup_cf379">バックアップを開始</string>
     <string name="kp_store_it_away_from_your_12_6edea">12語または24語とは別の場所に保管してください。両方が必要で、どちらか一方を失うとアカウントを失います。</string>
     <string name="kp_store_it_somewhere_safe_and_private_8204a">火や水から離れた、安全でプライベートな場所に保管してください。</string>
@@ -280,6 +285,7 @@
     <string name="kp_this_address_0a1a1">このアドレス</string>
     <string name="kp_this_address_consolidating_d0ba3">このアドレス（統合）</string>
     <string name="kp_this_address_does_not_carry_a_981c0">このアドレスには公開鍵がありません。</string>
+    <string name="kp_this_address_has_history_so_this_401c3">このアドレスには履歴があるため、正しいアカウントのようです。</string>
     <string name="kp_this_address_holds_funds_so_this_77e6c">このアドレスには資金があるため、正しいアカウントのようです。</string>
     <string name="kp_this_can_t_be_undone_fe63a">これは元に戻せません。</string>
     <string name="kp_this_card_already_holds_a_backup_978f8">このカードにはすでにバックアップがあります。保存すると、新しいバックアップが確認された後で置き換えられます。</string>
@@ -311,7 +317,7 @@
     <string name="kp_waiting_for_a_price_c88b2">価格を待っています...</string>
     <string name="kp_watch_only_this_cannot_spend_but_95314">監視専用です。送金はできませんが、このアカウントのすべてのアドレスが公開されます。</string>
     <string name="kp_we_ll_check_again_in_6_cdcf2">6か月後にもう一度確認します。</string>
-    <string name="kp_we_picked_the_first_address_with_43d0f">資金のある最初のアドレスを選択しました。使用しているアドレスと異なる場合は、別のアドレスをタップしてください。</string>
+    <string name="kp_we_picked_the_most_likely_account_7fd1f">最も可能性の高いアカウントを選びました。使っているものと違う場合は、別のアカウントをタップしてください。</string>
     <string name="kp_website_2e8a5">ウェブサイト</string>
     <string name="kp_what_is_a_passphrase_7619f">パスフレーズとは？</string>
     <string name="kp_what_s_cached_e73da">キャッシュされているもの</string>
@@ -335,6 +341,7 @@
     <string name="kp_your_12_or_24_words_alone_047c3">12語または24語だけではこのアカウントは元に戻りません。書き留めたパスフレーズを、大文字とスペースも含めて正確に入力してください。</string>
     <string name="kp_your_12_or_24_words_are_b8157">12語または24語があなたのアカウントです</string>
     <string name="kp_your_12_or_24_words_stay_d1f9a">12語または24語は、設定 &gt; アカウントをバックアップ でいつでも確認できます。</string>
+    <string name="kp_your_account_d7913">あなたのアカウント</string>
     <string name="kp_your_backup_is_good_b254a">バックアップは問題ありません</string>
     <string name="kp_your_card_needs_the_kachat_nfc_f6761">カードに先にKaChat-NFCソフトウェアが必要です。Kaspa Quick StartのNFCカードページから読み込んでください。</string>
     <string name="kp_your_chatting_address_f76c6">あなたのチャットアドレス</string>

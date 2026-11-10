@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">La scansione automatica trova i migliori nodi disponibili e vi si connette. Scegliere un nodo specifico si connette solo a quello, senza ripiegare su altri. Non influisce su indicizzatori, domini o explorer delle altre schede. Aggiungi i tuoi indirizzi alla rubrica IP qui sotto per sceglierli qui.</string>
     <string name="ab_picker_empty_body">Aggiungi contatti in Portafoglio > Contatti.</string>
     <string name="ab_no_contacts">Ancora nessun contatto</string>
-    <string name="where_is_this_seed_phrase_from">Da dove vengono le tue 12 o 24 parole?</string>
-    <string name="different_wallets_store_your_kaspa">Wallet diversi conservano i tuoi Kaspa su percorsi di indirizzi diversi. Scegli da dove provengono queste parole, così KaPay trova i tuoi fondi e i tuoi domini.</string>
     <string name="import_words_enter_recovery_phrase">Inserisci le tue 12 o 24 parole</string>
 </resources>

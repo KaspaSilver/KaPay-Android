@@ -57,9 +57,13 @@ Wallet tab shows `BackupHygieneCard` under Send, Receive and Request, and `Backu
 random words in random order on `SeedPhraseKeyboard`, then the passphrase if the account has one.
 Passing, or Can't Complete This and the backup steps again, starts the timer over; closing leaves
 the card up. The passphrase entry screen (`PassphraseAddressPreview`) shows the chatting address and
-its balance as you type. On import it checks the first 50 identity addresses, picks the first with
-funds, lists any others to choose from, and imports onto the chosen one
-(`WalletViewModel.findChattingAddresses`, iOS 4f5dfd2); Import waits for that search (iOS 0799cec).
+its balance as you type. Import has no wallet list (iOS 018e634): after the words and "Did you use a
+passphrase?", `WalletViewModel.findImportAccounts` derives every `WalletSourceFamily` (Standard 0..<50,
+KDX and OneKey 0..<20, Chainge 0), makes one node balance call plus a REST transactions-count per
+type's #0 (`KaspaWalletEngine.addressHasHistory`), keeps those with funds or history, and lists them
+with the most funded type first: "Your Account" (`PassphraseFoundStep`) with No, or live under the
+passphrase field. The pick goes to `setPendingImportChoice`; nothing found is Standard #0, and "See
+Every Wallet Type" lists each type's #0. Import waits for that search (iOS 0799cec).
 A created account is marked as owing its backup just before its keys are saved
 (`commitCreatedWallet`'s `beforeSaving`), so a kill mid-create can't skip it.
 Every sign-in opens on Wallet. Biometrics for account login are off by default, and switched off
@@ -97,7 +101,7 @@ Not cold storage: the card never generates or uses a key. The card commands and 
 that repo's `docs/PROTOCOL.md`, shared across apps; the payload is iOS's version 2 (`chattingAddress`,
 no passphrase), so a card moves between phones. Settings > Back Up Account > Back Up to NFC Card (behind the seed
 phrase's biometric gate) only exists for an account with a passphrase, which is what protects it:
-it's never written to the card. The Import chooser's Restore from NFC Card reads with the 6-digit
+it's never written to the card. Import's name screen has Restore from NFC Card at the bottom; it reads with the 6-digit
 PIN, asks for the passphrase and checks it against the saved chatting address. Saving to a card never
 clears the backup warning.
 
@@ -434,8 +438,8 @@ The status-bar icon is the vector `drawable/ic_kachat_wallet_notification.xml`.
   Marketplace page) and `kachatwallet` (its old name,
   still accepted). No `kachat://` or `https://kachat.app` links and no share target: those belong
   to KaChat.
-- Version: `app/build.gradle.kts` (`versionName`, `versionCode`, `kachatBuildNumber`): 5.2.3 (4),
-  versionCode 11, matching the iPhone wallet's version and build.
+- Version: `app/build.gradle.kts` (`versionName`, `versionCode`, `kachatBuildNumber`): 5.2.3 (5),
+  versionCode 12, matching the iPhone wallet's version and build.
 - Signing: `keystore.properties` and the keystores are gitignored and the owner's. KaPay's
   `keystore.properties` holds only the Play upload key (`kapay-upload.jks`, alias `kapay-upload`),
   which signs `bundlePlayRelease`; the GitHub APK keeps the debug key until a `storeFile` key is

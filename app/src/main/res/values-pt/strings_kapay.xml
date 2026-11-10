@@ -123,6 +123,7 @@
     <string name="kp_get_ready_70c1b">Prepare-se</string>
     <string name="kp_give_this_account_a_name_so_18d55">De um nome a esta conta para que voce possa reconhece-la.</string>
     <string name="kp_give_this_address_a_label_to_32e1b">De um rotulo a este endereco para ajudar a reconhece-lo.</string>
+    <string name="kp_has_history_d008a">Tem histórico</string>
     <string name="kp_hide_34d8b">Ocultar</string>
     <string name="kp_how_much_fa22a">Quanto?</string>
     <string name="kp_i_have_a_pen_and_paper_690e2">Tenho papel e caneta</string>
@@ -142,6 +143,7 @@
     <string name="kp_it_was_read_back_from_the_40719">Foi lido de volta do cartão e conferido. Para restaurá-lo, escolha Importar conta existente, depois Restaurar do cartão NFC, e digite seu PIN e sua frase secreta. Sua frase secreta não está no cartão, então guarde-a bem, junto com suas 12 ou 24 palavras anotadas.</string>
     <string name="kp_kachat_domains_df144">Domínios .kachat</string>
     <string name="kp_kachat_indexer_url_da526">URL do indexador .kachat</string>
+    <string name="kp_kapay_checks_your_words_against_every_5bb67">O KaPay verifica suas palavras em todos os tipos de carteira Kaspa, então você não precisa saber de qual delas vieram.</string>
     <string name="kp_kas_b358b">KAS</string>
     <string name="kp_kas_price_bb9bb">Preco do KAS</string>
     <string name="kp_kaspa_network_fceee">Rede Kaspa</string>
@@ -172,6 +174,7 @@
     <string name="kp_no_addresses_discovered_yet_15738">Nenhum endereco descoberto ainda.</string>
     <string name="kp_no_addresses_with_a_balance_or_3a874">Ainda não há endereços com saldo ou domínio</string>
     <string name="kp_no_funds_on_this_address_if_29703">Sem fundos neste endereço. Se você esperava encontrar fundos aqui, confira sua frase secreta.</string>
+    <string name="kp_no_funds_or_history_on_this_20035">Sem fundos ou histórico neste endereço.</string>
     <string name="kp_no_photos_screenshots_cloud_storage_notes_c2ec4">Nada de fotos, capturas de tela, armazenamento na nuvem, apps de notas, e-mail ou chats.</string>
     <string name="kp_no_spending_addresses_4440e">Nenhum endereco de gasto</string>
     <string name="kp_no_subfolders_fd56f">Nenhuma subpasta.</string>
@@ -236,6 +239,7 @@
     <string name="kp_saves_this_account_s_12_or_a4fe2">Salva as 12 ou 24 palavras desta conta no seu cartão, protegidas por um PIN de 6 dígitos.</string>
     <string name="kp_scan_card_75864">Escanear cartão</string>
     <string name="kp_search_again_ddef8">Buscar de novo</string>
+    <string name="kp_see_every_wallet_type_92dd4">Ver todos os tipos de carteira</string>
     <string name="kp_see_my_words_again_5c21f">Ver minhas palavras de novo</string>
     <string name="kp_select_85982">Selecionar</string>
     <string name="kp_sell_fa3cf">Vender</string>
@@ -252,6 +256,7 @@
     <string name="kp_some_of_those_words_don_t_96de4">Algumas dessas palavras não conferem. Confira seu papel e tente de novo.</string>
     <string name="kp_some_transactions_could_not_be_loaded_c11c5">Algumas transações não foram carregadas. Puxe para atualizar e tentar de novo.</string>
     <string name="kp_spending_45614">Gasto</string>
+    <string name="kp_standard_kaspa_wallet_0671b">Carteira Kaspa padrão</string>
     <string name="kp_start_backup_cf379">Iniciar backup</string>
     <string name="kp_store_it_away_from_your_12_6edea">Guarde-a longe das suas 12 ou 24 palavras. Você precisa das duas, e perder qualquer uma significa perder a conta.</string>
     <string name="kp_store_it_somewhere_safe_and_private_8204a">Guarde em um lugar seguro e privado, longe de fogo e água.</string>
@@ -280,6 +285,7 @@
     <string name="kp_this_address_0a1a1">Este endereço</string>
     <string name="kp_this_address_consolidating_d0ba3">Este endereço (consolidando)</string>
     <string name="kp_this_address_does_not_carry_a_981c0">Este endereço não contém uma chave pública.</string>
+    <string name="kp_this_address_has_history_so_this_401c3">Este endereço tem histórico, então parece ser a conta certa.</string>
     <string name="kp_this_address_holds_funds_so_this_77e6c">Este endereço tem fundos, então parece ser a conta certa.</string>
     <string name="kp_this_can_t_be_undone_fe63a">Isso nao pode ser desfeito.</string>
     <string name="kp_this_card_already_holds_a_backup_978f8">Este cartão já tem um backup. Ao salvar, ele é substituído assim que o novo for confirmado.</string>
@@ -311,7 +317,7 @@
     <string name="kp_waiting_for_a_price_c88b2">Aguardando um preço...</string>
     <string name="kp_watch_only_this_cannot_spend_but_95314">Somente visualização. Isso não pode gastar, mas revela todos os endereços desta conta.</string>
     <string name="kp_we_ll_check_again_in_6_cdcf2">Vamos conferir de novo em 6 meses.</string>
-    <string name="kp_we_picked_the_first_address_with_43d0f">Escolhemos o primeiro endereço com fundos. Toque em outro se esse não for o que você usa.</string>
+    <string name="kp_we_picked_the_most_likely_account_7fd1f">Escolhemos a conta mais provável. Toque em outra se não for a que você usa.</string>
     <string name="kp_website_2e8a5">Site</string>
     <string name="kp_what_is_a_passphrase_7619f">O que é uma frase secreta?</string>
     <string name="kp_what_s_cached_e73da">O que está em cache</string>
@@ -335,6 +341,7 @@
     <string name="kp_your_12_or_24_words_alone_047c3">Só as 12 ou 24 palavras não recuperam esta conta. Digite a frase secreta como você anotou, exatamente, incluindo maiúsculas e espaços.</string>
     <string name="kp_your_12_or_24_words_are_b8157">Suas 12 ou 24 palavras são a sua conta</string>
     <string name="kp_your_12_or_24_words_stay_d1f9a">Suas 12 ou 24 palavras continuam disponíveis em Configurações &gt; Fazer backup da conta.</string>
+    <string name="kp_your_account_d7913">Sua conta</string>
     <string name="kp_your_backup_is_good_b254a">Seu backup está bom</string>
     <string name="kp_your_card_needs_the_kachat_nfc_f6761">Seu cartão precisa primeiro do software KaChat-NFC. Carregue-o pela página Cartão NFC no Kaspa Quick Start.</string>
     <string name="kp_your_chatting_address_f76c6">Seu endereço de chat</string>

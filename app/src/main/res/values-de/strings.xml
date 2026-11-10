@@ -1374,7 +1374,5 @@
     <string name="kaspa_node_settings_footer">Automatische Suche findet die besten verfügbaren Nodes und verbindet sich mit ihnen. Ein bestimmter Node verbindet nur mit diesem, ohne Ausweichen auf andere. Betrifft nicht die Indexer, Domains oder den Explorer in den anderen Tabs. Füge unten im IP-Adressbuch eigene Adressen hinzu, um sie hier auszuwählen.</string>
     <string name="ab_picker_empty_body">Füge Kontakte unter Wallet > Kontakte hinzu.</string>
     <string name="ab_no_contacts">Noch keine Kontakte</string>
-    <string name="where_is_this_seed_phrase_from">Woher stammen deine 12 oder 24 Wörter?</string>
-    <string name="different_wallets_store_your_kaspa">Verschiedene Wallets speichern dein Kaspa auf unterschiedlichen Adresspfaden. Wähle, woher diese Wörter stammen, damit KaPay dein Guthaben und deine Domains findet.</string>
     <string name="import_words_enter_recovery_phrase">Gib deine 12 oder 24 Wörter ein</string>
 </resources>

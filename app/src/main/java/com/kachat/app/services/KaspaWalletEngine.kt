@@ -625,6 +625,23 @@ class KaspaWalletEngine @Inject constructor(
         // the caller asks the REST gateway instead.
         nodePoolManager.getUtxosByAddress(address)?.let { UtxoMath.checkedTotal(it.map { u -> u.utxoEntry.amount }) }
 
+    /**
+     * Whether [address] has been in at least one transaction, for import's auto-detect (iOS
+     * 018e634 `addressHasHistory`): a chat identity or an emptied wallet holds no coins. Gives up
+     * after 8 s. A failed probe counts as no history: it only ranks what import shows first, and
+     * every wallet type stays one tap away.
+     */
+    suspend fun addressHasHistory(address: String): Boolean {
+        val api = networkService.kaspaRestApi.value ?: return false
+        return try {
+            kotlinx.coroutines.withTimeoutOrNull(8_000L) { api.getTransactionsCount(address).total > 0 } ?: false
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     /** What each of [addresses] holds as the node sees it, or null when no node can answer. */
     suspend fun nodeBalances(addresses: List<String>): Map<String, Long>? =
         nodePoolManager.getBalancesByAddresses(addresses)

@@ -1377,7 +1377,5 @@
     <string name="kaspa_node_settings_footer">자동 검색은 사용 가능한 최적의 노드를 찾아 연결합니다. 특정 노드를 선택하면 다른 노드로 전환하지 않고 그 노드에만 연결합니다. 다른 탭의 인덱서, 도메인, 탐색기에는 영향이 없습니다. 여기서 선택하려면 아래 IP 주소록에 주소를 추가하세요.</string>
     <string name="ab_picker_empty_body">지갑 > 연락처에서 연락처를 추가하세요.</string>
     <string name="ab_no_contacts">아직 연락처가 없습니다</string>
-    <string name="where_is_this_seed_phrase_from">12개 또는 24개 단어는 어디서 왔나요?</string>
-    <string name="different_wallets_store_your_kaspa">지갑마다 Kaspa를 보관하는 주소 경로가 다릅니다. KaPay이 자금과 도메인을 찾을 수 있도록 이 단어가 어디서 왔는지 고르세요.</string>
     <string name="import_words_enter_recovery_phrase">12개 또는 24개 단어 입력</string>
 </resources>

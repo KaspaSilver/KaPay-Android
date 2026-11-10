@@ -20,6 +20,11 @@ data class BalanceResponse(
     val balance: Long   // in sompi (1 KAS = 100_000_000 sompi)
 )
 
+/** `GET addresses/{address}/transactions-count`: how many transactions an address has been in. */
+data class TransactionsCountResponse(
+    val total: Int = 0
+)
+
 /** Request body for the batched `POST addresses/balances` endpoint. */
 data class BalancesRequest(
     val addresses: List<String>
@@ -231,6 +236,12 @@ interface KaspaRestApi {
     suspend fun getHashrateHistory(
         @Query("resolution") resolution: String = "1d"
     ): List<HashrateSample>
+
+    /** For import's auto-detect: whether an address has any history (iOS 018e634). */
+    @GET("addresses/{address}/transactions-count")
+    suspend fun getTransactionsCount(
+        @Path("address") address: String
+    ): TransactionsCountResponse
 
     @GET("addresses/{address}/utxos")
     suspend fun getUtxos(
