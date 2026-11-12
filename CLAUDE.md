@@ -438,8 +438,8 @@ The status-bar icon is the vector `drawable/ic_kachat_wallet_notification.xml`.
   Marketplace page) and `kachatwallet` (its old name,
   still accepted). No `kachat://` or `https://kachat.app` links and no share target: those belong
   to KaChat.
-- Version: `app/build.gradle.kts` (`versionName`, `versionCode`, `kachatBuildNumber`): 5.2.3 (5),
-  versionCode 12, matching the iPhone wallet's version and build.
+- Version: `app/build.gradle.kts` (`versionName`, `versionCode`, `kachatBuildNumber`): 5.2.3 (6),
+  versionCode 13, matching the iPhone wallet's version and build.
 - Signing: `keystore.properties` and the keystores are gitignored and the owner's. KaPay's
   `keystore.properties` holds only the Play upload key (`kapay-upload.jks`, alias `kapay-upload`),
   which signs `bundlePlayRelease`; the GitHub APK keeps the debug key until a `storeFile` key is
